@@ -1,0 +1,22 @@
+// FAUST standard library
+import("stdfaust.lib");
+// THIS library
+SIG = library("SpaneddaSIG.lib");
+
+/*
+Generic Signal Processing Library for DSP:
+- Generation of signals (oscillators,lfo...)
+- Processing of signals (waveshaping,distortion...)
+*/
+
+// Wrap = Rescale the Int Part of the Signal
+Wrap(x)=x-int(x);
+
+// Wrap function (offset: treshold 0.0 to 1.0 and then rescale INT Part)
+OffsetWrap(offset,x) = (x+offset)-int(x);
+
+// Dirac Impulse Train 0-1 (F = frequency)
+Trainpulse(F) = (F/ma.SR:(+:Wrap)~ _):((((_*-1)+1)-0.5)>0)<:((_-(_:mem ))>0);
+
+// Sample and Hold: 1=SAH (controlsig, signal) or sig : SAH(controlsig)
+SAH(x,sig) = (*(1-(((x-(x:mem ))>0)))+sig*(((x-(x:mem ))>0)))~_;
