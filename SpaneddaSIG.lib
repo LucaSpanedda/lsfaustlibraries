@@ -20,3 +20,7 @@ Trainpulse(F) = (F/ma.SR:(+:Wrap)~ _):((((_*-1)+1)-0.5)>0)<:((_-(_:mem ))>0);
 
 // Sample and Hold: 1=SAH (controlsig, signal) or sig : SAH(controlsig)
 SAH(x,sig) = (*(1-(((x-(x:mem ))>0)))+sig*(((x-(x:mem ))>0)))~_;
+
+// Wavefolding (g = gain, Sig)= waveshaper : saturator via Triangular Tabulation.
+Wavefolding(g,x) = (x*(g/2)) <: ((_>0)*(_) <: (_<+0.5)*(_) + ((_>+0.5)*((_*-1)+1))),
+                   ((_<0)*(_) <: (_>-0.5)*(_) + ((_<-0.5)*((_*-1)-1))) :> + : _*2;
