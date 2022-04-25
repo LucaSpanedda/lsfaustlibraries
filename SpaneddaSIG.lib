@@ -26,5 +26,5 @@ Wavefolding(g,x) = (x*(g/2)) <: ((_>0)*(_) <: (_<+0.5)*(_) + ((_>+0.5)*((_*-1)+1
                    ((_<0)*(_) <: (_>-0.5)*(_) + ((_<-0.5)*((_*-1)-1))) :> + : _*2;
 
 // Phasor with two outs: 0° and 180°. (f=frequency)
-phasor180(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
+Phasor180(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
     with{xywrap(x,y)= (x-int(x)),((y+0.5)-int(y));};
