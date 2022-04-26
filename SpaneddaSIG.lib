@@ -18,8 +18,10 @@ OffsetWrap(offset,x) = (x+offset)-int(x);
 // Dirac Impulse Train 0-1 (F = frequency)
 Trainpulse(F) = (F/ma.SR:(+:Wrap)~ _):((((_*-1)+1)-0.5)>0)<:((_-(_:mem ))>0);
 
-// Sample and Hold: 1=SAH (controlsig, signal) or sig : SAH(controlsig)
-SAH(x,sig) = (*(1-(((x-(x:mem ))>0)))+sig*(((x-(x:mem ))>0)))~_;
+// Sample and Hold: input --> sah(control sig)
+        sah(x) = sahf
+            with{trigger = (((x*-1+1)-0.5)>0)-((((x*-1+1)-0.5)>0):mem)>0;
+                sahf(y) = (*(1-trigger) + (y*trigger))~ _;};
 
 // Wavefolding (g = gain, Sig)= waveshaper : saturator via Triangular Tabulation.
 Wavefolding(g,x) = (x*(g/2)) <: ((_>0)*(_) <: (_<+0.5)*(_) + ((_>+0.5)*((_*-1)+1))),
