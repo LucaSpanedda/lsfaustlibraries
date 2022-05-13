@@ -1,7 +1,7 @@
 // FAUST standard library
 import("stdfaust.lib");
 // THIS library
-SIG = library("SpaneddaSIG.lib");
+SIG = library("LSSIG.lib");
 
 /*
 Generic Signal Processing Library for DSP:
@@ -40,15 +40,4 @@ with{
     circuit(x) = ((x)>(x:mem)) <: ((_*x ), _);
     };
  
-Localmax = _ : abs <: loop ~_
-with{
-    loop(x) = ((_ , x) : max);
-    };
-
-LocalmaxSec(S) = _ : abs <: loop ~_
-with{
-    loop(x) = ((_ , (x*(1-Trainpulse))) : max);
-    Trainpulse = (+(1) : %(ma.SR*S))~ _ <: (_ < (_:mem));
-    };
-
 Trainpulse(F) = (+(1) : %(ma.SR/F))~ _ <: (_ < (_:mem));
