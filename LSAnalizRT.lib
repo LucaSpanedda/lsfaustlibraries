@@ -32,9 +32,19 @@ with{
     loop(x) = ((_ , (x*(1-Trainpulse))) : max);
     Trainpulse = (+(1) : %(ma.SR*S))~ _ <: (_ < (_:mem));
     };
+    
+// Dario Sanfilippo SlidingMax
+/*
+maxN(2) = max;
+maxN(N) = max(maxN(N - 1));
+slidingMax(N, x) = par(i, N, x @ i) : maxN(N);
+process = _ <: slidingMax(12);
+*/
 
-// LAR S = Sec.
-// Feedback counterbalancing via simple "LAR" mechanism
-// LAR mechanism: Audio Feedback with Self-regulated Gain - REFERENCE (Agostino Di Scipio)
-// https://echo.orpheusinstituut.be/article/a-relational-ontology-of-feedback#audio
+/*
+LAR S = Sec.
+Feedback counterbalancing via simple "LAR" mechanism
+LAR mechanism: Audio Feedback with Self-regulated Gain - REFERENCE (Agostino Di Scipio)
+https://echo.orpheusinstituut.be/article/a-relational-ontology-of-feedback#audio
+*/
 LAR(S) = _ <: *(1-an.rms_envelope_rect(S));
