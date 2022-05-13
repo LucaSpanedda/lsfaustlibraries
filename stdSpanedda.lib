@@ -3,4 +3,6 @@
 // that i have done through a series of environments.
 //########################################################################################
 
-SIG = library("SpaneddaSIG.lib");
+
+SIG = library("LSSIG.lib");
+ANRT = library("LSAnalizRT.lib");
