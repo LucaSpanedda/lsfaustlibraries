@@ -1,6 +1,5 @@
 // FAUST standard library
 import("stdfaust.lib");
-
 // THIS library
 SIG = library("LSSIG.lib");
 
@@ -28,6 +27,13 @@ Randomseed(seed)  = ((seed*(1103515245)))/2147483647.0;
 Noiseed(seed) = (+(seed)~*(1103515245))/(2147483647.0);
 
 // TO DO HERE : SAH NOISE noise ---> SAH
+// TO DO HERE : Binary Noise (Noise only 1 or 0)
+// TO DO HERE : TraiNNoise (Trainpulse * Noise)
+// TO DO HERE : Brownian Noise(f, probability f) - (Gaussian Noise : Random Walk)
+// TO DO HERE : TraiNNoiseBinary
+// TO DO HERE : JitterPhasor (Slice Phasor)
+// TO DO HERE : Various PHASORS
+// TO DO HERE : JitterSineosc - sin(Slice Phasor)
 
 // Phasor (f=frequency).
 Phasor(f) = (f/ma.SR):(+ <: _-int(_))~_ ;
