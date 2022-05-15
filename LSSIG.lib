@@ -9,14 +9,6 @@ Generic Signal Processing Library for DSP:
 - Processing of signals (waveshaping,distortion...)
 */
 
-// Wrap = Rescale the Int Part of the Signal
-Wrap(x)=x-int(x);
-
-// Wrap function (offset: treshold 0.0 to 1.0 and then rescale INT Part)
-OffsetWrap(offset,x) = (x+offset)-int(x);
-
-// Dirac Impulse Train 0-1 (F = frequency)
-Trainpulse(F) = (F/ma.SR:(+:Wrap)~ _):((((_*-1)+1)-0.5)>0)<:((_-(_:mem ))>0);
 
 // Sample and Hold: input --> sah(control sig)
         sah(x) = sahf
@@ -34,10 +26,29 @@ Phasor(f) = (f/ma.SR):(+ <: _-int(_))~_ ;
 Phasor180wrap(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
     with{xywrap(x,y)= (x-int(x)),((y+0.5)-int(y));};
 
-Peakholdcond = abs : circuit : false
-with{
-    false(a,b) = ((1-b) : _*(a:mem) : (+ : _*(1-b))~_) + a;
-    circuit(x) = ((x)>(x:mem)) <: ((_*x ), _);
-    };
- 
-Trainpulse(F) = (+(1) : %(ma.SR/F))~ _ <: (_ < (_:mem));
+// Wrap = Rescale the Int Part of the Signal
+Wrap(x)=x-int(x);
+
+// Wrap function (offset: treshold 0.0 to 1.0 and then rescale INT Part)
+OffsetWrap(offset,x) = (x+offset)-int(x);
+
+// Dirac Impulse Train 0-1 (F = frequency)
+TrainpulseF(F) = (F/ma.SR:(+:Wrap)~ _):((((_*-1)+1)-0.5)>0)<:((_-(_:mem ))>0);
+
+// Trainpulse 1 Sample
+Trainpulse1(Sec) = (+(1) : %(ma.SR*Sec))~ _ <: (_ < (_:mem));
+
+// Trainpulse with Variable Width
+TrainpulseSAMP(Sec,Samps) = (+(1) : %(ma.SR*Sec))~ _ <: (_ < (_@Samps));
+
+// Transform an input Signal to a Trainpulse 1 Sample
+SigtoPulse1(x) = (((x:abs)<0.5)<:_<(_:mem));
+
+// Transform an input Signal to a Trainpulse with Variable Width
+SigtoPulseSAMP(Samps,x) = (((x:abs)<0.5)<:_<(_@Samps));
+
+// Transform an input Signal to a Digital KICK Percussion
+SigtoKICK(Amp,Decay,x) = sin(circuit)
+    with{
+        circuit = (x:SigtoPulse1)*Amp:(+ : _*Decay)~ _;
+        };
