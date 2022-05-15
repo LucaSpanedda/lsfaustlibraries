@@ -1,5 +1,6 @@
 // FAUST standard library
 import("stdfaust.lib");
+
 // THIS library
 SIG = library("LSSIG.lib");
 
@@ -9,6 +10,7 @@ Generic Signal Processing Library for DSP:
 - Processing of signals (waveshaping,distortion...)
 */
 
+// TO DO HERE : 2 SAH, 1 with internal trigger, 1 with external trigger ( Sig--->Abs ...)
 
 // Sample and Hold: input --> sah(control sig)
         sah(x) = sahf
@@ -18,6 +20,14 @@ Generic Signal Processing Library for DSP:
 // Wavefolding (g = gain, Sig)= waveshaper : saturator via Triangular Tabulation.
 Wavefolding(g,x) = (x*(g/2)) <: ((_>0)*(_) <: (_<+0.5)*(_) + ((_>+0.5)*((_*-1)+1))),
                    ((_<0)*(_) <: (_>-0.5)*(_) + ((_<-0.5)*((_*-1)-1))) :> + : _*2;
+
+// RANDOM GENERATOR : Change the seed value for generate a different random number
+Randomseed(seed)  = ((seed*(1103515245)))/2147483647.0; 
+
+// NOISE GENERATOR : for Every Seed a new Noise Stream
+Noiseed(seed) = (+(seed)~*(1103515245))/(2147483647.0);
+
+// TO DO HERE : SAH NOISE noise ---> SAH
 
 // Phasor (f=frequency).
 Phasor(f) = (f/ma.SR):(+ <: _-int(_))~_ ;
