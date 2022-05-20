@@ -43,9 +43,9 @@ Noisepulse(F,seed) = Trainpulse(F)*Noiseed(seed);
 // NOISE Impulse Train in BIT values - F
 NoisepulseBit(F,seed) = Trainpulse(F)*Noiseed(seed)>0;
 
-// TO DO HERE : Brownian Noise(f, probability f) - (Gaussian Noise : Random Walk)
-// TO DO HERE : TraiNNoiseBinary
-// TO DO HERE : JitterPhasor (Slice Phasor)
+// BROWNIAN F : noise produced by Brownian motion, alternative name of random walk
+BrownianF(f,noisef,seed) = ((f/ma.SR)*NoiseFreqBit(noisef,seed):(+ :Wrap)~_):Wavefolding(2);
+
 // TO DO HERE : Various PHASORS
 // TO DO HERE : JitterSineosc - sin(Slice Phasor)
 
