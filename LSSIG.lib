@@ -34,6 +34,8 @@ NoiseFreq(f,seed) = Noiseed(seed) : SAH(Phasor(f));
 // NOISE BIT : noise 0 or 1
 NoiseBit(seed) = (+(seed)~*(1103515245))/(2147483647.0)>0;
 
+Noisepulse(F,seed) = Trainpulse(F)*Noiseed(seed);
+
 // TO DO HERE : TraiNNoise (Trainpulse * Noise)
 // TO DO HERE : Brownian Noise(f, probability f) - (Gaussian Noise : Random Walk)
 // TO DO HERE : TraiNNoiseBinary
