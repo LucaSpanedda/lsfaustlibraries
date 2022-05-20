@@ -11,10 +11,12 @@ Generic Signal Processing Library for DSP:
 
 // TO DO HERE : 2 SAH, 1 with internal trigger, 1 with external trigger ( Sig--->Abs ...)
 
-// Sample and Hold: input --> sah(control sig)
-        sah(x) = sahf
-            with{trigger = (((x*-1+1)-0.5)>0)-((((x*-1+1)-0.5)>0):mem)>0;
-                sahf(y) = (*(1-trigger) + (y*trigger))~ _;};
+// Sample and Hold Circuit:  Sig --> circuit(control signal for trigger)
+SAH(x,y) = Circuit(y)~ _
+with{
+    Trig = (((x*-1+1)-0.5)>0)-((((x*-1+1)-0.5)>0):mem)>0;
+    Circuit(y) = (*(1-Trig) + (y*Trig));
+    };
 
 // Wavefolding (g = gain, Sig)= waveshaper : saturator via Triangular Tabulation.
 Wavefolding(g,x) = (x*(g/2)) <: ((_>0)*(_) <: (_<+0.5)*(_) + ((_>+0.5)*((_*-1)+1))),
