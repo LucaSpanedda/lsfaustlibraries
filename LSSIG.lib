@@ -28,8 +28,12 @@ Randomseed(seed)  = ((seed*(1103515245)))/2147483647.0;
 // NOISE GENERATOR : for Every Seed a new Noise Stream
 Noiseed(seed) = (+(seed)~*(1103515245))/(2147483647.0);
 
-// TO DO HERE : SAH NOISE noise ---> SAH
-// TO DO HERE : Binary Noise (Noise only 1 or 0)
+// NOISE GENERATOR F : with variable frequency and seed
+NoiseFreq(f,seed) = Noiseed(seed) : SAH(Phasor(f));
+
+// NOISE BIT : noise 0 or 1
+NoiseBit(seed) = (+(seed)~*(1103515245))/(2147483647.0)>0;
+
 // TO DO HERE : TraiNNoise (Trainpulse * Noise)
 // TO DO HERE : Brownian Noise(f, probability f) - (Gaussian Noise : Random Walk)
 // TO DO HERE : TraiNNoiseBinary
