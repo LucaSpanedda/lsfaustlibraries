@@ -64,6 +64,9 @@ BrownianF(f,noisef,seed) = ((f/ma.SR)*NoiseFreqBit(noisef,seed):(+ :Wrap)~_):Wav
 // Phasor (f=frequency).
 Phasor(f) = (f/ma.SR):(+ : Wrap)~_ ;
 
+// Phasor with Phase Jitter
+PhasorJitter(F,Fjitter,seed) = (Phasor(F)+(NoiseFreq(Fjitter,seed):abs)):Wrap;
+
 // Phasor with two outs: 0° and 180°. (f=frequency)
 Phasor180wrap(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
     with{xywrap(x,y)= (x-int(x)),((y+0.5)-int(y));};
