@@ -58,9 +58,6 @@ NoisepulseBit(F,seed) = Trainpulse(F)*Noiseed(seed)>0;
 // BROWNIAN F : noise produced by Brownian motion, alternative name of random walk
 BrownianF(f,noisef,seed) = ((f/ma.SR)*NoiseFreqBit(noisef,seed):(+ :Wrap)~_):Wavefolding(2);
 
-// TO DO HERE : Various PHASORS
-// TO DO HERE : JitterSineosc - sin(Slice Phasor)
-
 // Phasor (f=frequency).
 Phasor(f) = (f/ma.SR):(+ : Wrap)~_ ;
 
@@ -70,6 +67,12 @@ PhasorJitter(F,Fjitter,seed) = (Phasor(F)+(NoiseFreq(Fjitter,seed):abs)):Wrap;
 // Phasor with two outs: 0° and 180°. (f=frequency)
 Phasor180wrap(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
     with{xywrap(x,y)= (x-int(x)),((y+0.5)-int(y));};
+
+// Virtual Analog Sine Oscillator
+VASine(F) = sin(Phasor(F)*2*ma.PI);
+
+// Virtual Analog Sine Oscillator with Phase Jitter
+VASineJitter(F,Fjitter,seed) = sin(PhasorJitter(F,Fjitter,seed)*2*ma.PI);
 
 // Wrap function (offset: treshold 0.0 to 1.0 and then rescale INT Part)
 OffsetWrap(offset,x) = (x+offset)-int(x);
