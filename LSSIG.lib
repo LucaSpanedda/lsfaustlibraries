@@ -31,6 +31,9 @@ Noiseed(seed) = (+(seed)~*(1103515245))/(2147483647.0);
 // NOISE GENERATOR F : with variable frequency and seed
 NoiseFreq(f,seed) = Noiseed(seed) : SAH(Phasor(f));
 
+// NOISE GENERATOR with variable frequency and seed in BIT values
+NoiseFreqBit(f,seed) = (Noiseed(seed) : SAH(Phasor(f))>0)*2-1;
+
 // NOISE BIT : noise 0 or 1
 NoiseBit(seed) = (+(seed)~*(1103515245))/(2147483647.0)>0;
 
@@ -47,7 +50,7 @@ NoisepulseBit(F,seed) = Trainpulse(F)*Noiseed(seed)>0;
 // TO DO HERE : JitterSineosc - sin(Slice Phasor)
 
 // Phasor (f=frequency).
-Phasor(f) = (f/ma.SR):(+ <: _-int(_))~_ ;
+Phasor(f) = (f/ma.SR):(+ : Wrap)~_ ;
 
 // Phasor with two outs: 0° and 180°. (f=frequency)
 Phasor180wrap(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
