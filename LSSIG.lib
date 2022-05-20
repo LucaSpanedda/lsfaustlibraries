@@ -9,8 +9,16 @@ Generic Signal Processing Library for DSP:
 - Processing of signals (waveshaping,distortion...)
 */
 
-// TO DO HERE : 2 SAH, 1 with internal trigger, 1 with external trigger ( Sig--->Abs ...)
+// Dirac Impulse value based on ADC status at Compile Time
+ADCDirac = (1-(1:mem))*_ : (_*1000000000) : abs : Wrap : +~_;
 
+// Wrap = Rescale the Int Part of the Signal
+Wrap(x)=x-int(x);
+
+// 1 when the Derivate part of the signal becomes negative
+Derivative(x)=x<(x:mem);
+
+// TO DO HERE : 2 SAH, 1 with internal trigger, 1 with external trigger ( Sig--->Abs ...)
 // Sample and Hold Circuit:  Sig --> circuit(control signal for trigger)
 SAH(x,y) = Circuit(y)~ _
 with{
@@ -55,10 +63,6 @@ Phasor(f) = (f/ma.SR):(+ : Wrap)~_ ;
 // Phasor with two outs: 0° and 180°. (f=frequency)
 Phasor180wrap(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
     with{xywrap(x,y)= (x-int(x)),((y+0.5)-int(y));};
-
-// Wrap = Rescale the Int Part of the Signal
-Wrap(x)=x-int(x);
-Derivative(x)=x<(x:mem);
 
 // Wrap function (offset: treshold 0.0 to 1.0 and then rescale INT Part)
 OffsetWrap(offset,x) = (x+offset)-int(x);
