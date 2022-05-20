@@ -10,7 +10,10 @@ Generic Signal Processing Library for DSP:
 */
 
 // Dirac Impulse value based on ADC status at Compile Time
-ADCDirac = (1-(1:mem))*_ : (_*1000000000) : abs : Wrap : +~_;
+ADCDirac = (1-(1:mem))*_ : (_*1000000000) : abs : Wrap;
+
+// Constant value based on ADC status at Compile Time
+ADCConstant = ADCConstant = ADCDirac : +~_;
 
 // Wrap = Rescale the Int Part of the Signal
 Wrap(x)=x-int(x);
@@ -19,6 +22,7 @@ Wrap(x)=x-int(x);
 Derivative(x)=x<(x:mem);
 
 // TO DO HERE : 2 SAH, 1 with internal trigger, 1 with external trigger ( Sig--->Abs ...)
+
 // Sample and Hold Circuit:  Sig --> circuit(control signal for trigger)
 SAH(x,y) = Circuit(y)~ _
 with{
