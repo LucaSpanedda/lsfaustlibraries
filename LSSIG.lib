@@ -56,10 +56,7 @@ Derivative(x)=x<(x:mem);
 OffsetWrap(offset,x) = (x+offset)-int(x);
 
 // Dirac Impulse Train 0-1 (F = frequency)
-TrainpulseF(F) = (F/ma.SR:(+:Wrap)~ _):((((_*-1)+1)-0.5)>0)<:((_-(_:mem ))>0);
-
-// Trainpulse 1 Sample
-Trainpulse1(F) = (+(1) : %(ma.SR/F))~ _ <: Derivative;
+Trainpulse(F) = (+(1) : %(ma.SR/F))~ _ <: Derivative;
 
 // Trainpulse with Variable Width
 TrainpulseSAMP(Sec,Samps) = (+(1) : %(ma.SR*Sec))~ _ <: (_ < (_@Samps));
