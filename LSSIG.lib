@@ -50,6 +50,7 @@ Phasor180wrap(f) = (f/ma.SR)<:(ro.interleave(2,2):(+,+)<: xywrap)~ si.bus(2)
 
 // Wrap = Rescale the Int Part of the Signal
 Wrap(x)=x-int(x);
+Derivative(x)=x<(x:mem);
 
 // Wrap function (offset: treshold 0.0 to 1.0 and then rescale INT Part)
 OffsetWrap(offset,x) = (x+offset)-int(x);
@@ -58,7 +59,7 @@ OffsetWrap(offset,x) = (x+offset)-int(x);
 TrainpulseF(F) = (F/ma.SR:(+:Wrap)~ _):((((_*-1)+1)-0.5)>0)<:((_-(_:mem ))>0);
 
 // Trainpulse 1 Sample
-Trainpulse1(Sec) = (+(1) : %(ma.SR*Sec))~ _ <: (_ < (_:mem));
+Trainpulse1(F) = (+(1) : %(ma.SR/F))~ _ <: Derivative;
 
 // Trainpulse with Variable Width
 TrainpulseSAMP(Sec,Samps) = (+(1) : %(ma.SR*Sec))~ _ <: (_ < (_@Samps));
