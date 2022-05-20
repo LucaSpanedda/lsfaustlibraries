@@ -7,6 +7,14 @@ ANRT = library("LSAnalizRT.lib");
 Analize in RealTime Audio Content library:
 */
 
+// possible descriptors:
+// Waveform
+// STFT (Spectrogram)
+// Spectral centroid
+// Spectral flux
+// LocalMax in dB
+// RMS in digital dB
+
 
 // smooth function (Onepole Filter)
 Smooth(G) = *(1-G) : +~*(G);
