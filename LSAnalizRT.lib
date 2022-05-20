@@ -7,11 +7,6 @@ ANRT = library("LSAnalizRT.lib");
 Analize in RealTime Audio Content library:
 */
 
-// TO DO:
-//
-// PEAKHOLDER
-// https://www.cs.princeton.edu/courses/archive/spr05/cos579/DSP/DSP.html
-//
 
 // smooth function (Onepole Filter)
 Smooth(G) = *(1-G) : +~*(G);
@@ -33,6 +28,17 @@ with{
     Trainpulse = (+(1) : %(ma.SR*S))~ _ <: (_ < (_:mem));
     };
 
+// RMS with indipendent attack and release time
+RMS(att, rel, x) = loop ~ _ : sqrt
+    with {
+        loop(y) = (1.0 - coeff) * x * x + coeff * y
+            with {
+                attCoeff = exp(-2.0 * ma.PI * ma.T / att);
+                relCoeff = exp(-2.0 * ma.PI * ma.T / rel);
+                coeff = ba.if(abs(x) > y, attCoeff, relCoeff);
+            };
+    };
+    
 /*
 LAR S = Sec.
 Feedback counterbalancing via simple "LAR" mechanism
