@@ -5,4 +5,4 @@
 
 
 SIG = library("LSSIG.lib");
-ANRT = library("LSAnalizRT.lib");
+ACART = library("LSACART.lib");
