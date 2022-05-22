@@ -1,20 +1,11 @@
 // FAUST standard library
 import("stdfaust.lib");
 // THIS library
-ANRT = library("LSAnalizRT.lib");
+ACART = library("LSACART.lib");
 
 /*
 Analize in RealTime Audio Content library:
 */
-
-// possible descriptors:
-// Waveform
-// STFT (Spectrogram)
-// Spectral centroid
-// Spectral flux
-// LocalMax in dB
-// RMS in digital dB
-
 
 // smooth function (Onepole Filter)
 Smooth(G) = *(1-G) : +~*(G);
@@ -54,3 +45,30 @@ LAR mechanism: Audio Feedback with Self-regulated Gain - REFERENCE (Agostino Di 
 https://echo.orpheusinstituut.be/article/a-relational-ontology-of-feedback#audio
 */
 LAR(S) = _ <: *(1-an.rms_envelope_rect(S));
+
+
+// averaging function with 2pi time constant; t is the averaging time in seconds
+avg(t, x) = y
+    letrec {
+        'y = x + alpha * (y - x);
+    }
+        with {
+            alpha = exp((-2.0 * ma.PI * ma.T) / t);
+        };
+
+// zero-crossing indicator function
+zeroCrossing(x) = (x * x') < 0;
+
+// zero-crossing rate
+zeroCrossingRate(t, x) = zeroCrossing(x) : avg(t);
+
+// pitch tracker as zero-crossing rate of self-regulating lowpassed inputs
+// we highpass the input to avoid infrasonic components to affect the measurements
+// we then clip the lowpass cutoff to improve stability
+pitchTracker(t, x) = loop ~ _
+    with {
+        loop(y) = fi.lowpass(4, max(80, y), xHighpassed) : (zeroCrossingRate(t) * ma.SR * .5) 
+            with {
+                xHighpassed = fi.highpass(1, 20, x);
+            };
+    };
