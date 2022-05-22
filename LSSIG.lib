@@ -13,7 +13,7 @@ Generic Signal Processing Library for DSP:
 ADCDirac = (1-(1:mem))*_ : (_*1000000000) : abs : Wrap;
 
 // Constant value based on ADC status at Compile Time
-ADCConstant = ADCConstant = ADCDirac : +~_;
+ADCConstant = ADCDirac : +~_;
 
 // Wrap = Rescale the Int Part of the Signal
 Wrap(x)=x-int(x);
