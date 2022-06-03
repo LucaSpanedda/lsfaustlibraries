@@ -24,8 +24,6 @@ Wrap(x)=x-int(x);
 // 1 when the Derivate part of the signal becomes negative
 Derivative(x)=x<(x:mem);
 
-// TO DO HERE : 2 SAH, 1 with internal trigger, 1 with external trigger ( Sig--->Abs ...)
-
 // Sample and Hold Circuit:  Sig --> circuit(control signal for trigger)
 SAH(trig,x) = loop
     with{
@@ -39,6 +37,19 @@ SAH(trig,x) = loop
 SAH2(trig,x) = loop~_
     with{
         loop(y) = (y,x : select2(trig));
+    };
+
+// Sample and Hold Function with internal Frequency Control
+SAHf(F,x) = loop
+    with{
+        loop = ((_,x) : Selector(Trainpulse(F)))~_
+        with{
+            Selector(sel) = (_*(1-sel)+_*(sel)); 
+            Trainpulse(f) = Xn <: _<(_:mem)
+                letrec{
+                    'Xn = (Xn+(f/ma.SR))-int(Xn);
+                    };
+        };
     };
 
 // Wavefolding (g = gain, Sig)= waveshaper : saturator via Triangular Tabulation.
