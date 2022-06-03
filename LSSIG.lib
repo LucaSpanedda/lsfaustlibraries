@@ -15,6 +15,9 @@ ADCDirac = (1-(1:mem))*_ : (_*1000000000) : abs : Wrap;
 // Constant value based on ADC status at Compile Time
 ADCConstant = ADCDirac : +~_;
 
+// Binary Selector - 0 = out1, 1 = out2
+Selector(sel,x,y) = (x*(1-sel)+y*(sel)); 
+
 // Wrap = Rescale the Int Part of the Signal
 Wrap(x)=x-int(x);
 
@@ -24,10 +27,18 @@ Derivative(x)=x<(x:mem);
 // TO DO HERE : 2 SAH, 1 with internal trigger, 1 with external trigger ( Sig--->Abs ...)
 
 // Sample and Hold Circuit:  Sig --> circuit(control signal for trigger)
-SAH(x,y) = Circuit(y)~ _
-with{
-    Trig = (((x*-1+1)-0.5)>0)-((((x*-1+1)-0.5)>0):mem)>0;
-    Circuit(y) = (*(1-Trig) + (y*Trig));
+SAH(trig,x) = loop
+    with{
+        loop = ((_,x) : Selector(trig))~_
+        with{
+            Selector(sel) = (_*(1-sel)+_*(sel)); 
+        };
+    };
+    
+// Sample and Hold Function with Faust select2
+SAH2(trig,x) = loop~_
+    with{
+        loop(y) = (y,x : select2(trig));
     };
 
 // Wavefolding (g = gain, Sig)= waveshaper : saturator via Triangular Tabulation.
@@ -60,6 +71,12 @@ BrownianF(f,noisef,seed) = ((f/ma.SR)*NoiseFreqBit(noisef,seed):(+ :Wrap)~_):Wav
 
 // Phasor (f=frequency).
 Phasor(f) = (f/ma.SR):(+ : Wrap)~_ ;
+
+// Phasor via Differential Equation in letrec (f=frequency).
+PhasorEQ(f) = Xn
+    letrec{
+        'Xn = (Xn+(f/ma.SR))-int(Xn);
+        };
 
 // Phasor with Phase Jitter
 PhasorJitter(F,Fjitter,seed) = (Phasor(F)+(NoiseFreq(Fjitter,seed):abs)):Wrap;
