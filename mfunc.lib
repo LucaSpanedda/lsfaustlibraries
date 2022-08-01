@@ -1,7 +1,7 @@
-// FAUST standard library
-import("stdfaust.lib");
 // THIS library
 mfunc = library("mfunc.lib");
+
+import("stdls.lib");
 
 /*
 Math functions library

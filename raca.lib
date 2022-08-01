@@ -1,7 +1,7 @@
-// FAUST standard library
-import("stdfaust.lib");
 // THIS library
 raca = library("raca.lib");
+
+import("stdls.lib");
 
 /*
 Realtime Audio Content Analysis Library

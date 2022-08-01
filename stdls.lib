@@ -1,9 +1,8 @@
 declare name "Luca Spanedda's Faust Libraries";
 
-
 // Import Standard Faust Libraries
 import("stdfaust.lib");
 // Import My Faust Libraries
-mfunc = library("mfunc.lib");
-raca = library("raca.lib");
-filters = library("filters.lib");
+import("mfunc.lib");
+import("raca.lib");
+import("filters.lib");
