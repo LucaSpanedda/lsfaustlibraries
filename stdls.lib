@@ -1,8 +1,9 @@
-//############################### stdls.lib ########################################
-// The purpose of this library is to give access to all the Faust libraries
-// that i have done through a series of environments.
-//########################################################################################
+declare name "Luca Spanedda's Faust Libraries";
 
 
-SIG = library("LSSIG.lib");
-ACART = library("LSACART.lib");
+// Import Standard Faust Libraries
+import("stdfaust.lib");
+// Import My Faust Libraries
+mfunc = library("mfunc.lib");
+raca = library("raca.lib");
+filters = library("filters.lib");
