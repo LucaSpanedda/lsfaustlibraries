@@ -75,7 +75,7 @@ NoisepulseBit(F,seed) = Trainpulse(F)*Noiseed(seed)>0;
 BrownianF(f,noisef,seed) = ((f/ma.SR)*NoiseFreqBit(noisef,seed):(+ :Wrap)~_):Wavefolding(2);
 
 phasor(f) = (f/ma.SR):(+ :\(x).(selector(0,x,0)) : decimal)~_ ;
-phreset(f,trig) = (f/ma.SR):(+ :\(x).(selector(0,trig,0)) :\(x).(x-int(x)))~_ ;
+phreset(f,trig) = (f/ma.SR):(+ :\(x).(selector(trig,x,0)) :\(x).(x-int(x)))~_ ;
 impulse(f) = phasor(f) : ph2pulse;
 
 // Phasor with Phase Jitter
