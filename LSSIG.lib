@@ -3,6 +3,7 @@ import("stdfaust.lib");
 // THIS library
 SIG = library("LSSIG.lib");
 
+
 /*
 Generic Signal Processing Library for DSP:
 - Generation of signals (oscillators,lfo...)
@@ -15,41 +16,34 @@ ADCDirac = (1-(1:mem))*_ : (_*1000000000) : abs : Wrap;
 // Constant value based on ADC status at Compile Time
 ADCConstant = ADCDirac : +~_;
 
-// Binary Selector - 0 = out1, 1 = out2
-Selector(sel,x,y) = (x*(1-sel)+y*(sel)); 
-
+// decimal function
+decimal(x) = x-int(x); 
+// selector between 0 and 1 state
+selector(sel,x,y) = (x*(1-sel)+y*(sel));
+// phasor to impulse 
+ph2pulse(x) = (x < x') + (1 - 1');
 // Wrap = Rescale the Int Part of the Signal
 Wrap(x)=x-int(x);
 
 // 1 when the Derivate part of the signal becomes negative
 Derivative(x)=x<(x:mem);
 
-// Sample and Hold Circuit:  Sig --> circuit(control signal for trigger)
-SAH(trig,x) = loop
+// SAH with Phasor
+SAH(ph,y) = loop~_
     with{
-        loop = ((_,x) : Selector(trig))~_
-        with{
-            Selector(sel) = (_*(1-sel)+_*(sel)); 
-        };
+        ph2pulse(x) = (x < x') + (1 - 1');
+        impulse = ph : ph2pulse;
+        loop(fb) = selector(impulse,fb,y);
     };
-    
-// Sample and Hold Function with Faust select2
-SAH2(trig,x) = loop~_
+// SAH with internal trigger
+SAH2(freq,y) = loop~_
     with{
-        loop(y) = (y,x : select2(trig));
-    };
-
-// Sample and Hold Function with internal Frequency Control
-SAHf(F,x) = loop
-    with{
-        loop = ((_,x) : Selector(Trainpulse(F)))~_
-        with{
-            Selector(sel) = (_*(1-sel)+_*(sel)); 
-            Trainpulse(f) = Xn <: _<(_:mem)
-                letrec{
-                    'Xn = (Xn+(f/ma.SR))-int(Xn);
-                    };
-        };
+        decimal(x) = x-int(x); 
+        selector(sel,x,y) = (x*(1-sel)+y*(sel));
+        ph2pulse(x) = (x < x') + (1 - 1');
+        phasor(f) = (f/ma.SR):(+ :\(x).(selector(0,x,0)) : decimal)~_ ;
+        impulse(f) = phasor(f) : ph2pulse;
+        loop(fb) = selector(impulse(freq),fb,y);
     };
 
 // Wavefolding (g = gain, Sig)= waveshaper : saturator via Triangular Tabulation.
@@ -80,14 +74,9 @@ NoisepulseBit(F,seed) = Trainpulse(F)*Noiseed(seed)>0;
 // BROWNIAN F : noise produced by Brownian motion, alternative name of random walk
 BrownianF(f,noisef,seed) = ((f/ma.SR)*NoiseFreqBit(noisef,seed):(+ :Wrap)~_):Wavefolding(2);
 
-// Phasor (f=frequency).
-Phasor(f) = (f/ma.SR):(+ : Wrap)~_ ;
-
-// Phasor via Differential Equation in letrec (f=frequency).
-PhasorEQ(f) = Xn
-    letrec{
-        'Xn = (Xn+(f/ma.SR))-int(Xn);
-        };
+phasor(f) = (f/ma.SR):(+ :\(x).(selector(0,x,0)) : decimal)~_ ;
+phreset(f,trig) = (f/ma.SR):(+ :\(x).(selector(0,trig,0)) :\(x).(x-int(x)))~_ ;
+impulse(f) = phasor(f) : ph2pulse;
 
 // Phasor with Phase Jitter
 PhasorJitter(F,Fjitter,seed) = (Phasor(F)+(NoiseFreq(Fjitter,seed):abs)):Wrap;
@@ -105,17 +94,8 @@ VASineJitter(F,Fjitter,seed) = sin(PhasorJitter(F,Fjitter,seed)*2*ma.PI);
 // Wrap function (offset: treshold 0.0 to 1.0 and then rescale INT Part)
 OffsetWrap(offset,x) = (x+offset)-int(x);
 
-// Dirac Impulse Train 0-1 (F = frequency)
-Trainpulse(F) = (+(1) : %(ma.SR/F))~ _ <: Derivative;
-
-// Trainpulse with Variable Width
-TrainpulseSAMP(Sec,Samps) = (+(1) : %(ma.SR*Sec))~ _ <: (_ < (_@Samps));
-
 // Transform an input Signal to a Trainpulse 1 Sample
 SigtoPulse1(x) = (((x:abs)<0.5)<:_<(_:mem));
-
-// Transform an input Signal to a Trainpulse with Variable Width
-SigtoPulseSAMP(Samps,x) = (((x:abs)<0.5)<:_<(_@Samps));
 
 // Transform an input Signal to a Digital KICK Percussion
 SigtoKICK(Amp,Decay,x) = sin(circuit)
