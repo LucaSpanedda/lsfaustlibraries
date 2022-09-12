@@ -10,7 +10,7 @@ Math functions library
 
 //---------------------------------------------------------------- FUNCTIONS ---
 // triangular function
-trifunc(x) = abs(ma.frac((x - .5)) * 2.0 - 1.0);
+triangle(x) = abs(ma.frac((x - .5)) * 2.0 - 1.0);
 // tests:
 //process = hslider("test ramp 0-1",0,0,1,.001) : trifunc;
 //process = os.phasor(1,100) : trifunc;
@@ -22,12 +22,13 @@ hann(x) = sin(ma.PI * x) ^ 2.0;
 //process = os.phasor(1,100) : hann;
 
 // tanh window function
-tanh(x) = ma.tanh(x);
+tangent(x) = ma.tanh(x);
 //process = hslider("test ramp 0-1",0,0,10,.001) : tanh;
 //process = os.phasor(1,100) : tanh;
 
+overlapAdd(ph) = ph, ((ph+.5) : \(y).(y-int(y)));
 
-//---------------------------------------------------------------- CLIPPINGS ---
+//------------------------------------------------------------- WAVESHAPING ---
 // waveshaper : classical softclip saturator.
 // based on the hyperbolic tangent function : 
 // y(t) = tanh x(t)
