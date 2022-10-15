@@ -4,3 +4,4 @@ declare name "Luca Spanedda's Faust Libraries";
 import("stdfaust.lib");
 // Import My Faust Libraries
 import("math.lib");
+import("va.lib");

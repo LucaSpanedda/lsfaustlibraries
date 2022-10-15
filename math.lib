@@ -1,6 +1,7 @@
 // THIS library
 math = library("math.lib");
-import("stdfaust.lib");
+// my standard library
+import("stdls.lib");
 
 /*
 Math functions library
