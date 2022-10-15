@@ -1,5 +1,5 @@
 // THIS library
-mfunc = library("math.lib");
+math = library("math.lib");
 import("stdfaust.lib");
 
 /*
