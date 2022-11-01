@@ -1,0 +1,59 @@
+// THIS library
+caos = library("caos.lib");
+// import Standard Faust library
+// https://github.com/grame-cncm/faustlibraries/
+import("stdfaust.lib");
+
+/*
+Caos Library
+*/
+
+
+//----------------------------------------------------------- CLASSIC MODELS ---
+
+/*
+Logistic Map: simple non-linear dynamical equation
+starting population (x) = number from 0. to 1.
+resources of the population (r) = number from 0. to 4.
+*/
+logisticmap(x,r) = circuit ~ _
+    with {
+        circuit(y) = x-x' + y * r * (1-y);
+    };  
+//process = (.8, 3.99991) : logisticmap;
+
+/*
+Sine Map 
+https://reader.elsevier.com/reader/sd/pii/S221137972101010X?token=CB5901729604492C395547447F9CDEDC5D23ED44541169453702655B9FBB0688B40024A508A75674E37D1576FD77B5E9&originRegion=eu-west-1&originCreation=20221101223155
+*/
+sinemap(y0, mu) = y
+    letrec {
+        'y = mu * sin(ma.PI * y + y0 - y0');
+    };
+//process = (0.5, 0.97) : sinemap;
+
+/*
+Lorenz Model
+*/
+lorenz(x0,y0,z0,sigma,rho,beta,dt,q) = circuit ~ si.bus(3)
+    with {
+        circuit(x,y,z) = 
+        ( (x+(sigma*(y-x))*dt) * q )+ (x0-x0'), 
+        ( (y+ (rho*x -(x*z) -y) * dt)*q )+ (y0-y0'), 
+        ( (z+ ((x*y)-(beta*z)) * dt)*q )+ (z0-z0');
+    };
+//process = (1.2,1.3,1.6, 10.0,28,2.666667,.005, 1.0) : lorenz;
+
+/*
+Van Der Pol Oscillator of First Grade
+*/
+vanderpol(x0,y0,u,dt,epsilon) = circuit ~ si.bus(2)
+    with {
+        circuit(x,y) = 
+        ( x + (u * (x - x ^ 3 / 3 - y) * dt) ) + x0-x0', 
+        ( y + (x / max(u,epsilon) ) * dt ) + y0-y0';
+    };
+//process = (1,1, 1.0,0.01,2.2204460492503131e-016) : vanderpol;
+
+
+//---------------------------------------------------------- MODIFIED MODELS ---
