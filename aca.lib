@@ -7,7 +7,8 @@ import("stdfaust.lib");
 Audio Content Analysis in Realtime Library
 */
 
-//------------------------------------------------------------------------------
+
+//----------------------------------------------------------------- MAX PEAK ---
 // Peak Max with IIR filter and max comparison
 peakmax = _ : abs <: loop ~_
 with{
@@ -15,8 +16,8 @@ with{
     };
 //process = _ : peakmax;
 
+//--------------------------------------------------- PEAK ENVELOPE FOLLOWER ---
 /*
-Peak Envelope (envelope follower)
 reference : 
 https://www.dariosanfilippo.com/blog/2017/
 lookahead-limiting-in-pure-data/
@@ -30,9 +31,7 @@ peakenvelope(t60,x) = abs(x) <: loop ~ _ * rt60(t60)
     };
 //process = peakenvelope(10);
 
-/*
-Moving Average with RMS
-*/
+//----------------------------------------------------------- MOVING AVERAGE ---
 movingAverage(seconds, x) = x - (x @ N) : fi.pole(1.0) / N
     with {
         N = seconds * ma.SR;
@@ -40,6 +39,7 @@ movingAverage(seconds, x) = x - (x @ N) : fi.pole(1.0) / N
 movingAverageRMS(seconds, x) = sqrt(max(0, movingAverage(seconds, x * x)));
 // process = movingAverageRMS(1);
 
+//----------------------------------------------------------- AD RMS AVERAGE ---
 /*
 RMS with indipendent attack and release time:
 reference:
@@ -59,9 +59,7 @@ RMS(att,rel,x) = loop ~ _ : sqrt
     };
 // process = RMS(1,1);
 
-/*
-Peak Holder
-*/
+//-------------------------------------------------------------- PEAK HOLDER ---
 /* 
 peakHolder(secondsPeriod, x) = y
     letrec {
@@ -85,8 +83,8 @@ peakHolder(holdTime, x) = loop ~ si.bus(2) : ! , _
     };
 //process = _ : peakHolder(2);
 
+//------------------------------------------------------- LOOKAHEAD LIMITING ---
 /*
-Lookahead limiting 
 reference : 
 https://www.dariosanfilippo.com/blog/2017/
 lookahead-limiting-in-pure-data/
@@ -98,3 +96,31 @@ lookAheadLimiting(threshold,x) =    (x : peakHolder(.1) : LPTPT(500) :
                                     threshold / max(ma.EPSILON, _) : min(1.0) *
                                     (x @ (ms2samp(2)));
 //process = os.osc(440) * 1000 : lookAheadLimiting(.5);
+
+//------------------------------------------------------------ PITCH TRACKER ---
+// averaging function with 2pi time constant; t is the averaging time in seconds
+avg(t, x) = y
+    letrec {
+        'y = x + alpha * (y - x);
+    }
+        with {
+            alpha = exp((-2.0 * ma.PI * ma.T) / t);
+        };
+
+// zero-crossing indicator function
+zeroCrossing(x) = (x * x') < 0;
+
+// zero-crossing rate
+zeroCrossingRate(t, x) = zeroCrossing(x) : avg(t);
+
+// pitch tracker as zero-crossing rate of self-regulating lowpassed inputs
+// we highpass the input to avoid infrasonic components to affect the measurements
+// we then clip the lowpass cutoff to improve stability
+pitchTracker(t, x) = loop ~ _
+    with {
+        loop(y) = fi.lowpass(4, max(80, y), xHighpassed) : (zeroCrossingRate(t) * ma.SR * .5) 
+            with {
+                xHighpassed = fi.highpass(1, 20, x);
+            };
+    };
+//process = os.osc(1000) : pitchTracker(.5);
