@@ -1,7 +1,7 @@
 // THIS library
 math = library("math.lib");
-// my standard library
-import("stdls.lib");
+// Faust Standard Library
+import("stdfaust.lib");
 
 /*
 Math functions library
@@ -147,3 +147,8 @@ hann(x) = sin(pi * x) ^ 2.0;
 // tanh window function
 tanh(x) = ma.tanh(x);
 //process = os.phasor(1,100) * 10 : tanh;
+
+//--------------------------------------------------------------- COVERSIONS ---
+// Conversions Formula: dB to a linear gain (0-1) and linear to dB
+lineartodB(G) = 20.0*log10(max(ma.MIN, G));
+dBtolinear(G) = pow(10.0, G/20.0);
