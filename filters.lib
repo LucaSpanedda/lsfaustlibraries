@@ -7,6 +7,8 @@ import("stdls.lib");
 Filters Library
 */
 
+// smooth function (Onepole Filter)
+Smooth(G) = *(1-G) : +~*(G);
 
 //---------------------------------------- ONEZERO FILTER (FIR di I° Ordine) ---
 // (G,x) = x=input, G=give amplitude 0-1(open-close) to the delayed signal
