@@ -28,32 +28,27 @@ OPF(CF,x) = OPFFBcircuit ~ _
 //process = no.noise : OPF(2000);
 
 //---------------------------------------- ONEPOLE FILTER TPT ------------------
-// One-Pole filter function. OnepoleTPT(CF) = Frequency Cut in HZ
 // TPT version of the One-Pole Filter by Vadim Zavalishin
 // reference : (by Will Pirkle)
 // http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
-// One-Pole filter function
-ONEPOLETPT(CF, x) = circuitout
+// Zavalishin Onepole TPT Filter
+onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
     with {
-        g = tan(CF * ma.PI / ma.SR);
+        g = tan(cf * ma.PI * ma.T);
         G = g / (1.0 + g);
-        circuit(s) = u , lp , hp , ap
+        loop(s) = u , lp , hp , ap
             with {
-                v = (x - s) * G;
-                u = v + lp;
-                lp = v + s;
-                hp = x - lp;
-                ap = lp - hp;
+            v = (x - s) * G; u = v + lp; lp = v + s; hp = x - lp; ap = lp - hp;
             };
-    // choose the output from the ONEPOLE Filter (ex. lp)
-    circuitout = circuit ~ _ : ! , si.bus(3);
     };
-
-LPop(CF, x) = ONEPOLETPT(CF, x) : _,!,!;
-HPop(CF, x) = ONEPOLETPT(CF, x) : !,_,!;
-ALLPASSop(CF, x) = ONEPOLETPT(CF, x) : !,!,_;
+// Lowpass  TPT
+LPTPT(cf, x) = onePoleTPT(cf, x) : (_ , ! , !);
+// Highpass TPT
+HPTPT(cf, x) = onePoleTPT(cf, x) : (! , _ , !);
+// Allpass TPT
+ALLPASSTPT(cf, x) = onePoleTPT(cf, x) : (!, !, _);
 // test:
-//process = no.noise : LPop(100);
+//process = no.noise : HPTPT(100);
 
 //-------------------------------------------------------------- TPT SVF -------
 // TPT version of the SVF Filter by Vadim Zavalishin
@@ -86,19 +81,20 @@ SVFTPT(K, Q, CF, x) = circuitout : !,!,_,_,_,_,_,_,_,_
     // choose the output from the SVF Filter (ex. bshelf)
     circuitout = circuit ~ si.bus(2);
     };
-
+// Instructions:
 // Outs = (lp , hp , bp, notch, apf, ubp, peak, bshelf)
 // SVFTPT(K, Q, CF, x) = (Filter-K, Filter-Q, Frequency Cut)
 
 // Filters Bank
-LPsvf(CF, x) = SVFTPT(0 : ba.db2linear, 0 : ba.db2linear, CF, x) : _,!,!,!,!,!,!,!;
-HPsvf(CF, x) = SVFTPT(0 : ba.db2linear, 0 : ba.db2linear, CF, x) : !,_,!,!,!,!,!,!;
-BPsvf(BW, CF, x) = SVFTPT(0 : ba.db2linear, Q, CF, x) : !,!,_,!,!,!,!,!
-    with{
-        Q = CF / BW;
-        };
-// test:
-//process = no.noise : LPsvf(((os.osc(2)+1)/2)*400);
+LPSVFTPT(CF, x) =   SVFTPT(0 : ba.db2linear, 0 : ba.db2linear, CF, x) :
+                    _,!,!,!,!,!,!,!;
+HPSVFTPT(CF, x) =   SVFTPT(0 : ba.db2linear, 0 : ba.db2linear, CF, x) :
+                    !,_,!,!,!,!,!,!;
+BPSVFTPT(BW, CF, x) = SVFTPT(0 : ba.db2linear, Q, CF, x) : !,!,_,!,!,!,!,!
+        with{
+            Q = CF / BW;
+            };
+//process = no.noise : LPSVFTPT(((os.osc(2)+1)/2)*400);
 
 //-------------------------------- FEEDFORWARD COMB FILTER (FIR of N° Order) ---
 // (t,g) = delay time in samples, filter gain 0-1
@@ -117,8 +113,8 @@ FBComb(Del,G,x) = FBcircuit ~ _
 // test:
 //process = (1-1') : FBComb(1000,0.998);
 
-//-------------------------------------------------------------- TPT LFBComb ---
-LFBCombTPT(Del,G,CF) = LFBCcircuit ~ _
+//---------------------------------------------------------------- T LFBComb ---
+LFBCombT(Del,G,CF) = LFBCcircuit ~ _
     with{
         LFBCcircuit(y,z) = z+(LowpassTPT(y)@(Del-1))*G
             with{
@@ -143,3 +139,27 @@ LFBCombTPT(Del,G,CF) = LFBCcircuit ~ _
 APF(Del,G,x) = x:(+: _<: @(Del-1), *(G))~ *(-G):mem, _ : + : _;
 // test:
 //process = (1-1') : APF(420, 0.9);
+
+//-------------------------------------------------------------- BUTTERWORTH ---
+butterworthQ(order, stage) = qFactor(order % 2)
+    with {
+        qFactor(0) = 1.0 / (2.0 * cos(((2.0 * stage + 1) *
+        (ma.PI / (order * 2.0)))));
+        qFactor(1) = 1.0 / (2.0 * cos(((stage + 1) * (ma.PI / order))));
+    };
+
+LPButterworthN(1, cf, x) = LPTPT(cf, x);
+LPButterworthN(N, cf, x) = cascade(N % 2)
+    with {
+        cascade(0) = x : seq(i, N / 2, LPSVF(butterworthQ(N, i), cf));
+        cascade(1) = x : LPTPT(cf) : seq(i, (N - 1) / 2,
+        LPSVF(butterworthQ(N, i), cf));
+    };
+
+HPButterworthN(1, cf, x) = HPTPT(cf, x);
+HPButterworthN(N, cf, x) = cascade(N % 2)
+    with {
+        cascade(0) = x : seq(i, N / 2, HPSVF(butterworthQ(N, i), cf));
+        cascade(1) = x : HPTPT(cf) : seq(i, (N - 1) /
+        2, HPSVF(butterworthQ(N, i), cf));
+    };
