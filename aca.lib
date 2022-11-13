@@ -1,12 +1,11 @@
 // THIS library
-raca = library("raca.lib");
-// Faust Standard Library
-import("stdfaust.lib");
+aca = library("aca.lib");
+// Luca Spanedda's Standard Faust Libraries
+import("stdls.lib");
 
 /*
 Audio Content Analysis in Realtime Library
 */
-
 
 //----------------------------------------------------------------- MAX PEAK ---
 // Peak Max with IIR filter and max comparison
@@ -18,10 +17,10 @@ with{
 
 //--------------------------------------------------- PEAK ENVELOPE FOLLOWER ---
 /*
-reference : 
+reference :
 https://www.dariosanfilippo.com/blog/2017/
 lookahead-limiting-in-pure-data/
-reference : 
+reference :
 https://www.cs.princeton.edu/courses/archive/spr05/cos579/DSP/DSP.html
 */
 peakenvelope(t60,x) = abs(x) <: loop ~ _ * rt60(t60)
@@ -39,7 +38,7 @@ movingAverage(seconds, x) = x - (x @ N) : fi.pole(1.0) / N
 movingAverageRMS(seconds, x) = sqrt(max(0, movingAverage(seconds, x * x)));
 // process = movingAverageRMS(1);
 
-//----------------------------------------------------------- AD RMS AVERAGE ---
+//----------------------------------------------- ATTACK DECAY - RMS AVERAGE ---
 /*
 RMS with indipendent attack and release time:
 reference:
@@ -60,7 +59,7 @@ RMS(att,rel,x) = loop ~ _ : sqrt
 // process = RMS(1,1);
 
 //-------------------------------------------------------------- PEAK HOLDER ---
-/* 
+/*
 peakHolder(secondsPeriod, x) = y
     letrec {
         'y = ba.if(reset, abs(x), max(y, abs(x)));
@@ -85,13 +84,13 @@ peakHolder(holdTime, x) = loop ~ si.bus(2) : ! , _
 
 //------------------------------------------------------- LOOKAHEAD LIMITING ---
 /*
-reference : 
+reference :
 https://www.dariosanfilippo.com/blog/2017/
 lookahead-limiting-in-pure-data/
-reference : 
+reference :
 https://users.iem.at/zmoelnig/publications/limiter/
 */
-lookAheadLimiting(threshold,x) =    (x : peakHolder(.1) : LPTPT(500) : 
+lookAheadLimiting(threshold,x) =    (x : peakHolder(.1) : LPTPT(500) :
                                     peakenvelope(.1)) :
                                     threshold / max(ma.EPSILON, _) : min(1.0) *
                                     (x @ (ms2samp(2)));
@@ -114,13 +113,22 @@ zeroCrossing(x) = (x * x') < 0;
 zeroCrossingRate(t, x) = zeroCrossing(x) : avg(t);
 
 // pitch tracker as zero-crossing rate of self-regulating lowpassed inputs
-// we highpass the input to avoid infrasonic components to affect the measurements
+// we highpass the input to avoid infrasonic
+// components to affect the measurements
 // we then clip the lowpass cutoff to improve stability
 pitchTracker(t, x) = loop ~ _
     with {
-        loop(y) = fi.lowpass(4, max(80, y), xHighpassed) : (zeroCrossingRate(t) * ma.SR * .5) 
+        loop(y) = fi.lowpass(4, max(80, y), xHighpassed) :
+                  (zeroCrossingRate(t) * ma.SR * .5)
             with {
                 xHighpassed = fi.highpass(1, 20, x);
             };
     };
 //process = os.osc(1000) : pitchTracker(.5);
+
+//---------------------------------------------------------- SAMPLE AND HOLD ---
+// SAH circuit
+SAH(ph,y) = \(FB).( selector( ph : \(x).(x < x'), FB, y ) )~ _ ;
+
+// SAH with internal trigger
+SAH2(f,y) = \(FB).( selector( phasor(f) : \(x).(x < x'), FB, y ) )~ _ ;

@@ -1,7 +1,7 @@
 // THIS library
 math = library("math.lib");
-// Faust Standard Library
-import("stdfaust.lib");
+// Luca Spanedda's Standard Faust Libraries
+import("stdls.lib");
 
 /*
 Math functions library
@@ -122,14 +122,18 @@ primeNumbers(index) = ba.take(index , list)
 
 //---------------------------------------------------------------- FUNCTIONS ---
 // only decimal pass
-decimal(x) = x-int(x); 
+decimal(x) = x-int(x);
 // only integer pass
 integer(x) = int(x);
+
 // shift in phase (0 to 1) and give only the fractional part of x
 wrap(shift,x) = ((x + shift) : \(y).(y-int(y)));
 
 // binary selector 0 - 1
 selector(sel,x,y) = ( x * (1-sel) + y * (sel) );
+
+// random: hange the seed value for generate a different random number
+random(seed)  = ((seed*(1103515245)))/2147483647.0;
 
 // sine and cosine
 sine(x) =   sin(x * 2 * pi);

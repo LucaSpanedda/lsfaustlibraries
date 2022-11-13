@@ -1,0 +1,145 @@
+// THIS library
+fir = library("fir.lib");
+// Luca Spanedda's Standard Faust Libraries
+import("stdls.lib");
+
+/*
+Filters Library
+*/
+
+//-------------------------------------- SMOOTHING FILTER (IIR di I° Ordine) ---
+// smooth function (Onepole Filter)
+smooth(G) = *(1-G) : +~*(G);
+
+//---------------------------------------- ONEZERO FILTER (FIR di I° Ordine) ---
+// (G,x) = x=input, G=give amplitude 0-1(open-close) to the delayed signal
+OZF(G,x) = (x:mem*G), x :> +;
+// test:
+//process = no.noise : OZF(0.1);
+
+//---------------------------------------- ONEPOLE FILTER (IIR di I° Ordine) ---
+OPF(CF,x) = OPFFBcircuit ~ _
+    with{
+        g(x) = x / (1.0 + x);
+        G = tan(CF * ma.PI / ma.SR):g;
+        OPFFBcircuit(y) = x*G+(y*(1-G));
+        };
+// test:
+//process = no.noise : OPF(2000);
+
+//---------------------------------------- ONEPOLE FILTER TPT ------------------
+// One-Pole filter function. OnepoleTPT(CF) = Frequency Cut in HZ
+// TPT version of the One-Pole Filter by Vadim Zavalishin
+// reference : (by Will Pirkle)
+// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
+// One-Pole filter function
+ONEPOLETPT(CF, x) = circuitout
+    with {
+        g = tan(CF * ma.PI / ma.SR);
+        G = g / (1.0 + g);
+        circuit(s) = u , lp , hp , ap
+            with {
+                v = (x - s) * G;
+                u = v + lp;
+                lp = v + s;
+                hp = x - lp;
+                ap = lp - hp;
+            };
+    // choose the output from the ONEPOLE Filter (ex. lp)
+    circuitout = circuit ~ _ : ! , si.bus(3);
+    };
+
+LPop(CF, x) = ONEPOLETPT(CF, x) : _,!,!;
+HPop(CF, x) = ONEPOLETPT(CF, x) : !,_,!;
+ALLPASSop(CF, x) = ONEPOLETPT(CF, x) : !,!,_;
+// test:
+//process = no.noise : LPop(100);
+
+//-------------------------------------------------------------- TPT SVF -------
+// TPT version of the SVF Filter by Vadim Zavalishin
+// reference : (by Will Pirkle)
+// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
+// SVFTPT filter function
+
+SVFTPT(K, Q, CF, x) = circuitout : !,!,_,_,_,_,_,_,_,_
+    with{
+        g = tan(CF * ma.PI / ma.SR);
+        R = 1.0 / (2.0 * Q);
+        G1 = 1.0 / (1.0 + 2.0 * R * g + g * g);
+        G2 = 2.0 * R + g;
+
+        circuit(s1, s2) = u1 , u2 , lp , hp , bp, notch, apf, ubp, peak, bshelf
+            with{
+                hp = (x - s1 * G2 - s2) * G1;
+                v1 = hp * g;
+                bp = s1 + v1;
+                v2 = bp * g;
+                lp = s2 + v2;
+                u1 = v1 + bp;
+                u2 = v2 + lp;
+                notch = x - ((2*R)*bp);
+                apf = x - ((4*R)*bp);
+                ubp = ((2*R)*bp);
+                peak = lp -hp;
+                bshelf = x + (((2*K)*R)*bp);
+            };
+    // choose the output from the SVF Filter (ex. bshelf)
+    circuitout = circuit ~ si.bus(2);
+    };
+
+// Outs = (lp , hp , bp, notch, apf, ubp, peak, bshelf)
+// SVFTPT(K, Q, CF, x) = (Filter-K, Filter-Q, Frequency Cut)
+
+// Filters Bank
+LPsvf(CF, x) = SVFTPT(0 : ba.db2linear, 0 : ba.db2linear, CF, x) : _,!,!,!,!,!,!,!;
+HPsvf(CF, x) = SVFTPT(0 : ba.db2linear, 0 : ba.db2linear, CF, x) : !,_,!,!,!,!,!,!;
+BPsvf(BW, CF, x) = SVFTPT(0 : ba.db2linear, Q, CF, x) : !,!,_,!,!,!,!,!
+    with{
+        Q = CF / BW;
+        };
+// test:
+//process = no.noise : LPsvf(((os.osc(2)+1)/2)*400);
+
+//-------------------------------- FEEDFORWARD COMB FILTER (FIR of N° Order) ---
+// (t,g) = delay time in samples, filter gain 0-1
+FFCF(t,g) = _ <: ( _@(t-1) *g), _ :> _;
+// test:
+//process = no.noise : FFCF(100, 0.9) <: _,_;
+
+//---------------------------------- FEEDBACK COMB FILTER (IIR di N° Ordine) ---
+// (Del,G) = DEL=delay time in samples. G=feedback gain 0-1
+FBCF(Del,G,x) = x:(+ @(Del-1)~ *(G)):mem;
+
+FBComb(Del,G,x) = FBcircuit ~ _
+    with {
+        FBcircuit(y) = x+y@(Del-1)*G;
+    };
+// test:
+//process = (1-1') : FBComb(1000,0.998);
+
+//-------------------------------------------------------------- TPT LFBComb ---
+LFBCombTPT(Del,G,CF) = LFBCcircuit ~ _
+    with{
+        LFBCcircuit(y,z) = z+(LowpassTPT(y)@(Del-1))*G
+            with{
+                LowpassTPT(x) = (lowpasscircuit ~ _ : ! , _)
+                    with{
+                        g = tan(CF * ma.PI / ma.SR);
+                        G = g / (1.0 + g);
+                        lowpasscircuit(sig) = u , lp
+                            with{
+                                v = (x - sig) * G;
+                                u = v + lp;
+                                lp = v + sig;
+                                };
+                        };
+                };
+        };
+// test:
+//process = (1-1') : LFBCombTPT(1000,0.998,10000);
+
+//----------------------------------- ALLPASS FILTER (FIR + IIR COMB FILTER) ---
+// (t,g) = give: delay in samples, feedback gain 0-1
+APF(Del,G,x) = x:(+: _<: @(Del-1), *(G))~ *(-G):mem, _ : + : _;
+// test:
+//process = (1-1') : APF(420, 0.9);
