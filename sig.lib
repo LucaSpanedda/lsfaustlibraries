@@ -65,6 +65,8 @@ sinusoidW(f) = phasor(f) * .5 : (math.cosine + .5) * 2;
 square(f) = ((phasor(f) > .5) - .5) * 2;
 //process = square(100);
 
+// PW Square, (PW = 0 to 1)
+pwsquare(f, pw) = ((Phasor(f) * -1) + pw) > 0;
 // PWM square - PWM control from -1 to +1
 pwmsquare(f,pwm) = ((((phasor(f) - .5) * 2) + pwm > 0) - .5) * 2;
 //process = pwmsquare(100, 0);
