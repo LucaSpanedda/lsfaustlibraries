@@ -19,6 +19,20 @@ noise = 1345789214 : noiseIndex;
 // noise with prime numbers
 primeNoise(index) = primeNumbers(index+1) : noiseIndex;
 
+// Stochastic Velvet Noise 
+// unpredictable pulses dependent on an exponential curve on noise
+// exponent for the curve, seed for the noise, ph 0 to 1
+SVNoise(exponent, seed, ph) = circuit(exponent, seed, ph) 
+with{
+    noiseIndex(index) = (+ (index)~ * (1103515245)) / 2147483647;
+    exponentialcurve(exponent,ph) = exponent ^ ((ph-.5) * 2) / exponent;
+    comparator(exponent, ph, x) =  abs(x) > 
+        ( (exponentialcurve(exponent,ph) * -1) +1) : \(z).(z > z');
+    circuit(exponent, seed, ph) =  (ph > 0) *
+        noiseIndex(seed) : comparator(exponent, ph);
+};
+//process =   SVNoise(100, 1429, hslider("SVNoiseph",0,0,1,.001));
+
 // ramp generator: frequency, ramp in ms.
 ramp(ms,trig) = (1000/ms)/ma.SR : + ~ _ * (1-trig) : \(x).( (x < 1) * x );
 
