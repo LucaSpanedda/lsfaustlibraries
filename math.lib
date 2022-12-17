@@ -156,3 +156,11 @@ tanh(x) = ma.tanh(x);
 // Conversions Formula: dB to a linear gain (0-1) and linear to dB
 lineartodB(G) = 20.0*log10(max(ma.MIN, G));
 dBtolinear(G) = pow(10.0, G/20.0);
+
+//----------------------------------------------------------- INTERPOLATIONS ---
+linInterpolate(x0, x1, delta) = x0 + delta * (x1-x0);
+siglinInterpol(order, x) = x : seq(r, order, interpolate)
+with{
+    interpolate(y) = y + .5 * (y' - y);
+};
+//process = os.phasor(1,100) : siglinInterpol(10) <: _,_;
