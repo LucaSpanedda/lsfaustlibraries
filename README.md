@@ -21,8 +21,8 @@ sudo make install
 cd ..
 cp Spanedda-Faustlibraries/CYBERSONIC.lib faust/libraries
 cp Spanedda-Faustlibraries/AIP.lib faust/libraries
-cat << EOF >> faust/libraries/all.lib
-import("CYBERSONIC.lib")
+cat << EOF >> faust/libraries/stdfaust.lib
+cy = library("CYBERSONIC.lib");
 EOF
 EOF
 ```
