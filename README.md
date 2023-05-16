@@ -18,5 +18,10 @@ cd faust
 git submodule update --init
 sudo make
 sudo make install
+cd ..
+cp Spanedda-Faustlibraries/AIP.lib faust/libraries
+cat << EOF >> faust/libraries/all.lib
+import("AIP.lib")
+EOF
 EOF
 ```
