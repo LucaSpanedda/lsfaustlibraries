@@ -3,7 +3,7 @@ my personal faust libraries
 
 ## Installation
 
-'''
+```
 cat > InstallFaust.sh << EOF
 #!/bin/bash    
     
@@ -19,4 +19,4 @@ git submodule update --init
 sudo make
 sudo make install
 EOF
-'''
+```
