@@ -1,6 +1,7 @@
 # Spanedda-Faustlibraries
 my personal faust libraries
 
+
 ## Installation
 
 ```
@@ -19,10 +20,9 @@ git submodule update --init
 sudo make
 sudo make install
 cd ..
-cp Spanedda-Faustlibraries/CYBERSONIC.lib faust/libraries
-cp Spanedda-Faustlibraries/AIP.lib faust/libraries
+cp Spanedda-Faustlibraries/cybersonic.lib faust/libraries
 cat << EOF >> faust/libraries/stdfaust.lib
-cy = library("CYBERSONIC.lib");
+cy = library("cybersonic.lib");
 EOF
 EOF
 ```
