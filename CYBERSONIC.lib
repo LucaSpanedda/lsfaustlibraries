@@ -1,4 +1,0 @@
-declare name "Luca Spanedda's Cybersonics Faust Libraries";
-
-// Import My Faust Libraries
-import("AIP.lib");
