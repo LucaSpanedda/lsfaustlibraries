@@ -12,7 +12,6 @@ onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
             v = (x - s) * G; u = v + lp; lp = v + s; hp = x - lp; ap = lp - hp;
             };
     };
-
 // Lowpass  TPT
 LPTPT(cf, x) = onePoleTPT(cf, x) : (_ , ! , !);
 // Highpass TPT
@@ -126,7 +125,8 @@ with{
     with{
         distrib(k, i) = (k + 1) + (i * N);
     };
-    netInit = par(i, N, (os.osc(((i+1) * .32242)), _, par(i, N-2, 0)));
+    slider(id) = hslider("%id F", (id+1) * .32242, 0, 10, .001) : si.smoo;
+    netInit = par(i, N, (os.osc(slider(i)), _, par(i, N-2, 0)));
     Primes = component("prime_numbers.dsp").primes;
     activationFunction(x) = x : ma.tanh;
     neuronWeights(neuronID) = vecOp((si.bus(N), weightsFunction(neuronID)), *) :> _;
