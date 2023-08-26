@@ -1,6 +1,33 @@
 // Import the standard Faust Libraries
 import("stdfaust.lib");
+
+// Ref.
 // https://simonhutchinson.com/2022/05/11/music-and-synthesis-with-a-single-neuron/
+/*
+An artificial neural network is fundamentally composed of interconnected artificial neurons, 
+and it operates as a model inspired by the biological neurons in our brains. 
+Here's a breakdown of how a neural network functions:
+
+Weighted Input Summation: Inputs are multiplied by weights associated with the connections 
+(synapses) between neurons. 
+These weights signify the strength of influence each input has on the neuron's output. 
+The weighted sum of these inputs is then computed.
+
+Activation Function: After calculating the weighted sum of inputs, 
+this sum is passed through an activation function. 
+This function introduces non-linearity to the model and determines whether the neuron 
+"fires" (produces a significant output) based on the input sum.
+
+Output Emission: The neuron's output is determined by the activation function. 
+If the output is significant, the neuron transmits the signal to other neurons it's connected to.
+
+Learning: This is where the learning process comes in. 
+In the context of artificial neural networks, 
+learning involves updating the weights of synapses based on the errors 
+between the predicted output and the actual output of the neuron. 
+This is achieved through error backpropagation algorithms, 
+which adjust the weights to minimize prediction errors.
+*/
 
 // Onepole
 onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
@@ -93,22 +120,41 @@ with{
 };
 
 // Neuron 
-neuron(N, minSec, maxSec) = neuronFunction ~ _ 
+neuron(N, ID, minSec, maxSec) = neuronFunction ~ _ 
 with{
-    fbFunction(x) = x * randomSig(110, minSec, maxSec);
-    noiseFunction = LPTPT(2000, noise(18617)) * randomSig(120, minSec, maxSec);
-    biasFunction = randomSig(100, minSec, maxSec);
+    fbFunction(x) = x * randomSig(110+ID, minSec, maxSec);
+    noiseFunction = LPTPT(2000, noise(18617+ID)) * randomSig(120+ID, minSec, maxSec);
+    biasFunction = randomSig(100+ID, minSec, maxSec);
     activationFunction(x) = x : ma.tanh : dcblocker(1, .995) : ma.tanh;
-    wightsFunction = par(i, N, randomSig(i, minSec, maxSec)) : par(i, N, abs);
+    wightsFunction = par(i, N, randomSig(i+ID, minSec, maxSec)) : par(i, N, abs);
     neuronWeights = vecOp((si.bus(N), wightsFunction), *);
     neuronFunction(x) = neuronWeights :> 
         (_ + biasFunction + (x : fbFunction) + noiseFunction) : activationFunction;
 };
 
 // Oscs Bank
-oscs(N) = par(i, N, os.osc(100 + (i * 30)));
+slider(id) = hslider("%id F", (100 + (id * 30)), 40, 1000, 1) : si.smoo;
+oscs(N) = par(i, N, os.osc(slider(i)));
 
 // Neuron Mixer
-neuronMixer(N, minSec, maxSec) = oscs(N) : neuron(N, 6, 4);
+neuronMixer(N, ID, minSec, maxSec) = oscs(N) : neuron(N, ID, 6, 4);
+//process = neuronMixer(8, 0, 6, 4), neuronMixer(8, 20, 6, 4);
 
-process = neuronMixer(8, 6, 4) <: si.bus(2);
+// Artificial Neural Network 
+ANN(N) = neuronWeights
+with{
+    Primes = component("prime_numbers.dsp").primes;
+    activationFunction(x) = x : ma.tanh;
+    neuronWeights = vecOp((si.bus(N), weightsFunction), *) :> 
+        activationFunction(_ + biasFunction);
+    biasFunction = noise(ba.take(100, Primes)) : triggerSAH;
+    weightsFunction = par(i, N, noise(ba.take(i + 1, Primes))) : par(i, N, triggerSAH);
+    triggerSAH(y) = out ~ _
+    with{
+        ph = button("trigger");
+        trigger = ph > ph';
+        iniTrig = 1@512 - 1@513;
+        out(x) = trigger : (_ + iniTrig, x, y) : selector;
+    };
+};
+process = oscs(5) : ANN(5);
