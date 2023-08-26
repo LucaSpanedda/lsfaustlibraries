@@ -2,6 +2,31 @@
 import("stdfaust.lib");
 // https://simonhutchinson.com/2022/05/11/music-and-synthesis-with-a-single-neuron/
 
+// Onepole
+onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
+    with {
+        g = tan(cf * ma.PI * ma.T);
+        G = g / (1.0 + g);
+        loop(s) = u , lp , hp , ap
+            with {
+            v = (x - s) * G; u = v + lp; lp = v + s; hp = x - lp; ap = lp - hp;
+            };
+    };
+
+// Lowpass  TPT
+LPTPT(cf, x) = onePoleTPT(cf, x) : (_ , ! , !);
+// Highpass TPT
+HPTPT(cf, x) = onePoleTPT(cf, x) : (! , _ , !);
+// Allpass TPT
+APTPT(cf, x) = onePoleTPT(cf, x) : (!, !, _);
+
+// DC Blocker
+dcblocker(zero, pole, x) = x : dcblockerout
+            with{
+                onezero =  _ <: _, mem : _,* (zero) : -;
+                onepole = + ~ * (pole);
+                dcblockerout = _ : onezero : onepole;
+            };
 
 // binary selector 0 - 1
 selector(sel, x, y) = ( x * (1 - sel) + y * (sel));
@@ -22,8 +47,10 @@ with{
 };
 
 // multinoise
-multinoise(N) = par(i, N, noise(ba.take(i + 1, primes)));
-
+multinoise(N) = par(i, N, noise(ba.take(i + 1, Primes)))
+with{
+    Primes = component("prime_numbers.dsp").primes;
+};
 
 // SAH with Feedback in FrequencyModulation
 modSAH(minSec, maxSec, y) = out ~ _
@@ -42,11 +69,46 @@ with{
     equalTrigger(x) = x * (1 - (x == x')); 
     out = noise(initSeed) : modSAH(minSec, maxSec) : equalTrigger;
 };
-process = randomMetro(1, .1, 12458923), randomMetro(1, .1, 22458923);
 
-// ba.line(1000);
-neuron(N) = ma.tanh( 
-        par(i, N, _ * si.smoo(hslider("%i G", 1, 0, 10, .001))) :> _ + 
-            si.smoo(hslider("bias", 0, -10, 10, .001)));
+// Random Signal
+randomSig(i, minSec, maxSec) = 
+    modSAH(minSec, maxSec, noise(ba.take(i + 1, Primes))) : ba.line(maxSec * ma.SR)
+with{
+    Primes = component("prime_numbers.dsp").primes;
+};
+
+// Weights of the Neurons with Auto-Modulated SAH 
+neuronWeights(N, minSec, maxSec) = par(i, N, randomSig(i, minSec, maxSec)) : par(i, N, abs);
+//process = neuronWeights(8, 6, 4);
+
+// Vectorial Operations
+vecOp(vectorsList, op) =
+    vectorsList : seq(i, vecDim - 1, vecOp2D , vecBus(vecDim - 2 - i))
+with{
+    vecBus(0) = par(i, vecLen, 0 : !);
+    vecBus(dim) = par(i, dim, si.bus(vecLen));
+    vecOp2D = ro.interleave(vecLen, 2) : par(i, vecLen, op);
+    vecDim = outputs(vectorsList) / vecLen;
+    vecLen = outputs(ba.take(1, vectorsList));
+};
+
+// Neuron 
+neuron(N, minSec, maxSec) = neuronFunction ~ _ 
+with{
+    fbFunction(x) = x * randomSig(110, minSec, maxSec);
+    noiseFunction = LPTPT(2000, noise(18617)) * randomSig(120, minSec, maxSec);
+    biasFunction = randomSig(100, minSec, maxSec);
+    activationFunction(x) = x : ma.tanh : dcblocker(1, .995) : ma.tanh;
+    wightsFunction = par(i, N, randomSig(i, minSec, maxSec)) : par(i, N, abs);
+    neuronWeights = vecOp((si.bus(N), wightsFunction), *);
+    neuronFunction(x) = neuronWeights :> 
+        (_ + biasFunction + (x : fbFunction) + noiseFunction) : activationFunction;
+};
+
+// Oscs Bank
 oscs(N) = par(i, N, os.osc(100 + (i * 30)));
-//process = oscs(8) : neuron(8);
+
+// Neuron Mixer
+neuronMixer(N, minSec, maxSec) = oscs(N) : neuron(N, 6, 4);
+
+process = neuronMixer(8, 6, 4) <: si.bus(2);
