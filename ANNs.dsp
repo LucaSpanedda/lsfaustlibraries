@@ -4,14 +4,10 @@ import("stdfaust.lib");
 
 
 // binary selector 0 - 1
-selector(sel, x, y) = ( x * (1 - sel) + y * (sel) );
-// SAH
-SAH(ph, y) = \(FB1).( selector( ph : \(x).(x < x') + 1 - 1'', FB1, y ) )~ _ <: trigger;
-range(slowestTsec, fastestTsec, x) = (1/slowestTsec) + (x * (1/fastestTsec));
-trigger(x, y) = y * (1 - (x == x')); 
-//process = os.osc(100) * (hslider("bias", 0, -10, 10, .001) : equal); 
-probabilityTrig(slowT, fastT) = \(FB2).(os.phasor(1, range(slowT, fastT, FB2)), abs(no.noise) : SAH)~ _;
-process = probabilityTrig(.1, .001); // : ba.line(200);
+selector(sel, x, y) = ( x * (1 - sel) + y * (sel));
+
+// phasor with module
+phasor(f) = (f : + ~ _ % ma.SR) / ma.SR;
 
 // pseudo-random noise with linear congruential generator (LCG)
 noise(initSeed) = LCG ~ _ : (_ / m)
@@ -24,7 +20,29 @@ with{
     // linear_congruential_generator
     LCG(seed) = ((a * seed + c) + (initSeed - initSeed') % m);
 };
+
+// multinoise
 multinoise(N) = par(i, N, noise(ba.take(i + 1, primes)));
+
+
+// SAH with Feedback in FrequencyModulation
+modSAH(minSec, maxSec, y) = out ~ _
+with{
+    ph(f, modf) = (f + modf : + ~ _ % ma.SR) / ma.SR;
+    trigger(x) = x < x';
+    minT = 1 / minSec;
+    maxT = 1 / maxSec;
+    iniTrig = 1 - 1';
+    out(x) = (minT, abs(x * (maxT - minT))) : ph : trigger : (_ + iniTrig, x, y) : selector; //_ <: trigger;
+};
+
+// MOD Metro
+randomMetro(minSec, maxSec, initSeed) = out
+with{
+    equalTrigger(x) = x * (1 - (x == x')); 
+    out = noise(initSeed) : modSAH(minSec, maxSec) : equalTrigger;
+};
+process = randomMetro(1, .1, 12458923), randomMetro(1, .1, 22458923);
 
 // ba.line(1000);
 neuron(N) = ma.tanh( 
