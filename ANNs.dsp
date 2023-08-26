@@ -1,33 +1,6 @@
 // Import the standard Faust Libraries
 import("stdfaust.lib");
 
-// Ref.
-// https://simonhutchinson.com/2022/05/11/music-and-synthesis-with-a-single-neuron/
-/*
-An artificial neural network is fundamentally composed of interconnected artificial neurons, 
-and it operates as a model inspired by the biological neurons in our brains. 
-Here's a breakdown of how a neural network functions:
-
-Weighted Input Summation: Inputs are multiplied by weights associated with the connections 
-(synapses) between neurons. 
-These weights signify the strength of influence each input has on the neuron's output. 
-The weighted sum of these inputs is then computed.
-
-Activation Function: After calculating the weighted sum of inputs, 
-this sum is passed through an activation function. 
-This function introduces non-linearity to the model and determines whether the neuron 
-"fires" (produces a significant output) based on the input sum.
-
-Output Emission: The neuron's output is determined by the activation function. 
-If the output is significant, the neuron transmits the signal to other neurons it's connected to.
-
-Learning: This is where the learning process comes in. 
-In the context of artificial neural networks, 
-learning involves updating the weights of synapses based on the errors 
-between the predicted output and the actual output of the neuron. 
-This is achieved through error backpropagation algorithms, 
-which adjust the weights to minimize prediction errors.
-*/
 
 // Onepole
 onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
@@ -141,14 +114,25 @@ neuronMixer(N, ID, minSec, maxSec) = oscs(N) : neuron(N, ID, 6, 4);
 //process = neuronMixer(8, 0, 6, 4), neuronMixer(8, 20, 6, 4);
 
 // Artificial Neural Network 
-ANN(N) = neuronWeights
+ANN(N) = neuralNetwork
 with{
+    neuralNetwork = (netInit : 
+                        seq(k, N, 
+                            par(i, N, 
+                                neuron(100 + distrib(k, i) * N, distrib(k, i))
+                            ) <: si.bus(N * N)
+                        ) : (si.bus(N), si.block(N * (N-1)))) ~ 
+                            (neuron(600, 500) <: si.bus(N))
+    with{
+        distrib(k, i) = (k + 1) + (i * N);
+    };
+    netInit = par(i, N, (os.osc(((i+1) * .32242)), _, par(i, N-2, 0)));
     Primes = component("prime_numbers.dsp").primes;
     activationFunction(x) = x : ma.tanh;
-    neuronWeights = vecOp((si.bus(N), weightsFunction), *) :> 
-        activationFunction(_ + biasFunction);
-    biasFunction = noise(ba.take(100, Primes)) : triggerSAH;
-    weightsFunction = par(i, N, noise(ba.take(i + 1, Primes))) : par(i, N, triggerSAH);
+    neuronWeights(neuronID) = vecOp((si.bus(N), weightsFunction(neuronID)), *) :> _;
+    neuron(neuronID, biasID) = neuronWeights(neuronID), biasFunction(biasID) :> activationFunction;
+    biasFunction(biasID) = noise(ba.take(biasID, Primes)) : triggerSAH;
+    weightsFunction(neuronID) = par(i, N, noise(ba.take(i + 1 + (neuronID), Primes))) : par(i, N, triggerSAH);
     triggerSAH(y) = out ~ _
     with{
         ph = button("trigger");
@@ -157,4 +141,4 @@ with{
         out(x) = trigger : (_ + iniTrig, x, y) : selector;
     };
 };
-process = oscs(5) : ANN(5);
+process = ANN(5);
