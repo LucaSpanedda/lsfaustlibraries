@@ -1,0 +1,3 @@
+import("stdfaust.lib");
+import("noises.lib");
+import("phasors.lib");
