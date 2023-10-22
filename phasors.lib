@@ -1,0 +1,69 @@
+import("stdfaust.lib");
+
+// constant sample rate value
+SR = ma.SR;
+// binary selector 0 - 1
+SELEC(sel, x, y) = (x * (1 - sel) + y * (sel));
+// signal signum
+SIGN(x) = (x > 0) - (x < 0);
+// derivative
+DR(x) = x < x';
+// dirac impulse
+DI = 1 - 1';
+
+// pseudo-random noise with linear congruential generator (LCG)
+noise(i_list) = LCG ~ _ : (_ / m)
+with{
+    // initSeed = an initial seed value
+    a = 18446744073709551557; // a large prime number, 
+    c = 12345; // a small prime number, such as 12345
+    m = 2 ^ 31; // 2.1 billion
+    // linear_congruential_generator
+    LCG(seed) = ((a * seed + c) + (initSeed - initSeed') % m);
+    initSeed = ba.take((i_list + 1), 
+        (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 
+        53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 
+        109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 
+        173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 
+        233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 
+        293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 
+        367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 
+        433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 
+        499, 503, 509, 521, 523, 541, 547, 557, 563, 569, 571, 
+        577, 587, 593, 599, 601)
+    );
+};
+
+// multi-noise 100 elements max.
+multinoise(N) = par(i, N, noise(i));
+
+// a classic sample and hold
+sah(x, t) = SELEC(t, _, x)~ _ ;
+
+// random sample and hold function
+randomsah(minF, maxF, y) = out ~ _ with{
+    out(x) =    (minF, abs(x * (maxF - minF))) :> 
+                phasor0 : DR : (_ + DI, x, y) : SELEC;
+};
+
+// phasor : every cycle start from 0
+phasor0(f)   =  int ~  (_ + 1') % (SR / f) : _ * f : _ / SR;
+
+// phasor with offset function
+phasorOffset(f, off)  =  int ~  (_ + 1') % (SR / f) : _ * f : (_ + (off * SR)) % SR / SR;
+
+// phasor with random reverse
+phasorRevers(f, minSF, maxSF, seed) =   int ~  (_ + 1' * 
+                                        (randomsah(minSF, maxSF, noise(seed)) : SIGN)) % 
+                                        (SR / f) : _ * f : _ / SR : abs;
+
+// phasor with random splicing and jumps
+phasorSplice(f, minSF, maxSF, seed) =   phasorOffset(1, 
+                                        abs(randomsah(minSF, maxSF, noise(seed))));
+
+// phasor : update frequency at every cycle
+phasorTF(frequency) = phasor0 ~ sahTF(fl) with{
+    l(mxl, mnl, x) = max(mnl, min(mxl, x));
+    fl = l(20000, .01, frequency);
+    sahTF(x, ts) = SELEC(DR(ts) + DI, _, x) ~ _;
+};
