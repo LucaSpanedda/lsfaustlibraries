@@ -1,4 +1,4 @@
-declare name "Luca Spanedda : Library";
+declare name "Cybersonic Library";
 declare author "Luca Spanedda";
 declare version "1.0";
 declare description "2023";
@@ -6,6 +6,7 @@ declare copyright "Copyright (C) 2023 Luca Spanedda <lucaspanedda1995@gmail.com>
 declare license "MIT license";
 // Import the standard Faust Libraries
 import("stdfaust.lib");
+
 
 /*******************************************************************************
 * CONSTANTS
@@ -53,6 +54,9 @@ integer(x) = int(x);
 
 // first derivate
 derivate(x) = x < x';
+
+// shift in phase (0 to 1) giving only the fractional part of x
+wrap(ph, x) = ((x + ph) : \(y).(y - int(y)));
 
 /*******************************************************************************
 * SAH : SAMPLE AND HOLD
@@ -110,6 +114,10 @@ phasorScatteringSinc(f, fJitter, seed) = phasorOffset(f, sahNoise(fJitter, seed)
 phasorScatteringAsinc(f, minfJitter, maxfJitter, seed) = 
     phasorOffset(f, sahNoiseAsinc(minfJitter, maxfJitter, seed) : abs);
 
+/*******************************************************************************
+* WINDOW FUNCTIONS
+*******************************************************************************/
+
 // Sine window function
 sine(ph) = sin(ph * 2 * PI);
 
@@ -140,6 +148,7 @@ bilinInterpolate(x0, x1, x0b, x1b, dt1, dt2) =
     with{
         linInterpolate(x0, x1, delta) = x0 + delta * (x1-x0);
     };
+
 //--------------------------------------------------------------- COVERSIONS ---
 // Conversions Formula: dB to a linear gain (0-1) and linear to dB
 linear2dB(G) = 20.0 * log10(max (ma.MIN, G));
@@ -713,7 +722,52 @@ with{
     record =    cgui(checkbox("[1]Record") : int);
     buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
 };
-//process = walkergrains(1), walkergrains(2);
+
+looperJitterSinc(i, y) = vgroup("looper", buffer ~ _ * fb)
+with{
+    LengthSecMax = 10;
+    offset = 2;
+    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
+    cgui(x) = vgroup("controls", x);
+    kgui(x) = hgroup("knobs", x);
+    readSpeed = cgui(kgui(4 ^ 
+                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
+    lengthSec = cgui(kgui(
+                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1)));
+    fJitter = cgui(kgui(
+                hslider("[0]F Jitter [style:knob][unit:_sec]",1, 1, 100, .001)));
+    fb = cgui(kgui(
+                hslider("[0]Feedback [style:knob][unit:_sec]",0, 0, 1, .001)));
+    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
+                hgroup("writing %i", info(1, 0, 1))) ~ 
+                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
+    readIndex = phasorScatteringSinc(1 / lengthSec, fJitter, i * 42543218) : hgroup("reading %i", info(1, 0, 1)) * (float(SR * lengthSec)) : int;
+    record =    cgui(checkbox("[1]Record ") : int);
+    buffer(x) =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, y + x, readIndex + offset);
+};
+
+looperJitterAsinc(i) = vgroup("looper", buffer)
+with{
+    LengthSecMax = 10;
+    offset = 2;
+    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
+    cgui(x) = vgroup("controls", x);
+    kgui(x) = hgroup("knobs", x);
+    readSpeed = cgui(kgui(4 ^ 
+                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
+    lengthSec = cgui(kgui(
+                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1)));
+    minfJitter = cgui(kgui(
+                hslider("[0]min F Jitter [style:knob][unit:_sec]",1, 1, 100, .001)));
+    maxfJitter = cgui(kgui(
+                hslider("[0]max F Jitter [style:knob][unit:_sec]",1, 1, 100, .001)));
+    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
+                hgroup("writing %i", info(1, 0, 1))) ~ 
+                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
+    readIndex = phasorScatteringAsinc(1 / lengthSec, minfJitter, maxfJitter, i * 12543218) : hgroup("reading %i", info(1, 0, 1)) * (float(SR * lengthSec)) : int;
+    record =    cgui(checkbox("[1]Record %i") : int);
+    buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
+};
 
 //------------------------------------------------------- GRANULAR SAMPLING ---
 granular_sampling(k, N, bufSec, x) = triggerArray(N, rate) : 
