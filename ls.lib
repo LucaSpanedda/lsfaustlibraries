@@ -7,7 +7,6 @@ declare license "MIT license";
 // Import the standard Faust Libraries
 import("stdfaust.lib");
 
-
 /*******************************************************************************
 * CONSTANTS
 *******************************************************************************/
@@ -16,6 +15,7 @@ EPS = ma.EPSILON;
 PI = ma.PI;
 // PI = 3.141592653589793238462643383279502884197169399375105820974944592307816406;
 TWOPI = 2.0 * PI;
+SRMAX = 192000;
 SR = ma.SR;
 NY = SR / 2.0;
 T = 1.0 / SR;
@@ -39,7 +39,10 @@ msToSamps(t) = (t / 1000.0) * SR;
 // clipping function                            
 clip(low, high, x) = max(low, min(high, x));  
 
-/* Unipolar to bipolar. */
+// signal signum
+signum(x) = (x > 0) - (x < 0);
+
+// Unipolar to bipolar
 uni2bi(x) = x * 2.0 - 1.0;
 
 // only decimal pass
@@ -51,14 +54,21 @@ integer(x) = int(x);
 // first derivate
 derivate(x) = x < x';
 
+/*******************************************************************************
+* SAH : SAMPLE AND HOLD
+*******************************************************************************/
+
 // binary selector
 selector(sel, x, y) = x * (1 - sel) + y * (sel);
 
 // a classic sample and hold
-sah(x, t) = selector(t, _, x) ~ _ ;
+sah(x, t) = selector(t, _, x) ~ _;
 
-// sah with clock in feedback (via FrequencyModulation)
-modSah(minHz, maxHz, y) = out ~ _
+// sample and hold with internal trigger
+sahSinc(f, x) = selector(phasor(f) : derivate, _, x) ~ _;
+
+// asinchronous sah with clock in feedback (via FM)
+sahAsinc(minHz, maxHz, y) = out ~ _
 with{
     ph(f, modf) = (f + modf : + ~ _ % ma.SR) / ma.SR;
     trigger(x) = x < x';
@@ -78,7 +88,11 @@ with{
 sahNoise(f, seed) = sah(noise(seed), derivate(phasor(f)));
 
 // asinc sah noise
-sahNoiseAsinc(minf, maxf, seed) = modSah(minf, maxf, noise(seed));
+sahNoiseAsinc(minf, maxf, seed) = sahAsinc(minf, maxf, noise(seed));
+
+/*******************************************************************************
+* PHASOR
+*******************************************************************************/
 
 // classic phasor
 phasor(f) = f * (0 + 1') : + ~  _ % SR : _ / SR;
@@ -93,7 +107,8 @@ phasorOffset(f, offset) = f * (0 + 1') : + ~  _ % SR : (_ + offset * SR) % SR : 
 phasorScatteringSinc(f, fJitter, seed) = phasorOffset(f, sahNoise(fJitter, seed) : abs);
 
 // phasor with Phase Jitter Asinc
-phasorScatteringAsinc(f, minfJitter, maxfJitter, seed) = phasorOffset(f, sahNoiseAsinc(minfJitter, maxfJitter, seed) : abs);
+phasorScatteringAsinc(f, minfJitter, maxfJitter, seed) = 
+    phasorOffset(f, sahNoiseAsinc(minfJitter, maxfJitter, seed) : abs);
 
 // Sine window function
 sine(ph) = sin(ph * 2 * PI);
@@ -273,9 +288,6 @@ for more models serch:
 - FILTERS -
 ************************************************************************
 ************************************************************************/
-
-//-------------------------------------------- DELAY with FB 1 sample Correction
-DEL(del, x) = x@(del - 1);
 
 //--------------------------------------------- ONEZERO FILTER (FIR of I° Order)
 // (g) = give amplitude 0-1(open-close) to the delayed signal 
@@ -647,19 +659,61 @@ with {
 };
 // process = localMax(4);
 
-//---------------------------------------------------------- SAMPLE AND HOLD ---
-// SAH circuit
-SAH(ph, y) = \(FB).( selector( ph : \(x).(x < x'), FB, y ) )~ _ ;
+/*******************************************************************************
+* RAW : READ AND WRITE TABLES
+*******************************************************************************/
 
-// SAH with internal trigger
-SAH2(f, y) = \(FB).( selector( phasor(f) : \(x).(x < x'), FB, y ) )~ _ ;
+looper(i) = vgroup("looper", buffer)
+with{
+    LengthSecMax = 10;
+    offset = 2;
+    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
+    cgui(x) = vgroup("controls", x);
+    kgui(x) = hgroup("knobs", x);
+    readSpeed = cgui(kgui(4 ^ 
+                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
+    lengthSec = cgui(kgui(
+                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1)));
+    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
+                hgroup("writing %i", info(1, 0, 1))) ~ 
+                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
+    readIndex = readSpeed/float(SR * lengthSec) : (+ : ma.frac : 
+                hgroup("reading %i", info(1, 0, 1))) ~ _ : 
+                * (float(SR * lengthSec)) : int;
+    record =    cgui(checkbox("[1]Record %i") : int);
+    buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
+};
 
-
-/************************************************************************
-************************************************************************
-- READ & WRITE TABLES -
-************************************************************************
-************************************************************************/
+walkergrains(i) = vgroup("looper", buffer)
+with{
+    offset = 2;
+    LengthSecMax = 10;
+    // phasor with random reverse
+    phasorReverse(f, minSF, maxSF, seed) =   int ~  (_ + 1' * 
+                                        (sahAsinc(minSF, maxSF, noise(seed)) : signum)) % 
+                                        (SR / f) : _ * f : _ / SR : abs;
+    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
+    cgui(x) = vgroup("controls", x);
+    kgui(x) = hgroup("knobs", x);
+    readSpeed = cgui(kgui(4 ^ 
+                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
+    lengthSec = cgui(kgui(
+                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1) : int));
+    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
+                hgroup("writing %i", info(1, 0, 1))) ~ 
+                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
+    mxsf = hslider("max dv[style:knob]",100, 1, 100, .001);
+    mnsf = hslider("min dv[style:knob]",1.0, 1, 100, .001);
+    readIndex = phasorReverse(1/lengthSec, mnsf, mxsf, i) :
+                hgroup("reading %i", info(1, 0, 1))
+                * (float(SR * lengthSec)) : int;    randomsah(minF, maxF, y) = out ~ _ with{
+        out(x) =    (minF, abs(x * (maxF - minF))) :> 
+                phasor : dirac : (_ + dirac, x, y) : selector;
+    };
+    record =    cgui(checkbox("[1]Record") : int);
+    buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
+};
+//process = walkergrains(1), walkergrains(2);
 
 //------------------------------------------------------- GRANULAR SAMPLING ---
 granular_sampling(k, N, bufSec, x) = triggerArray(N, rate) : 
