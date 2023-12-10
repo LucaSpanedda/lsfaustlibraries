@@ -1,4 +1,4 @@
-declare name "Cybersonic Library";
+declare name "ls.lib - Luca Spanedda's Library";
 declare author "Luca Spanedda";
 declare version "1.0";
 declare description "2023";
@@ -11,6 +11,7 @@ import("stdfaust.lib");
 /*******************************************************************************
 * CONSTANTS
 *******************************************************************************/
+
 EPS = ma.EPSILON;
 // EPSILON = 2.2204460492503131e-016;
 PI = ma.PI;
@@ -34,11 +35,11 @@ MIN = ma.MIN;
 // Dirac Impulse at Compile Time
 dirac = 1 - (1 : mem);
 
-// milliseconds to samples
-msToSamps(t) = (t / 1000.0) * SR;
-
 // clipping function                            
 clip(low, high, x) = max(low, min(high, x));  
+
+// softclipping via hyperbolic tangent function
+saturator(lim, x) = lim * tanh(1, x / (max(lim, EPS)));
 
 // signal signum
 signum(x) = (x > 0) - (x < 0);
@@ -56,7 +57,36 @@ integer(x) = int(x);
 derivate(x) = x < x';
 
 // shift in phase (0 to 1) giving only the fractional part of x
-wrap(ph, x) = ((x + ph) : \(y).(y - int(y)));
+wrap(ph, x) = x <: (_ + ph) - int(_ + ph);
+
+
+/*******************************************************************************
+* CONVERSIONS
+*******************************************************************************/
+
+// Conversions Formula: dB to a linear gain (0-1) and linear to dB
+linear2dB(G) = 20.0 * log10(max (ma.MIN, G));
+
+// linear to dB
+dB2linear(G) = pow(10.0, G/20.0);
+
+// milliseconds to samples
+ms2samp(t) = (t / 1000) * SR;
+
+// seconds to samples
+sec2samp(t) = t * SR;
+
+// (samps) = give tot. samples we want to know in milliseconds
+samps2ms(samps) = ((1000/SR) * samps) : int;
+
+// (meters) = give a distance in meters for samples of the filter
+meters2samps(meters) = ((SR/1000.) * ((1000*meters)/343.1) * 2);
+
+// (samps,seconds) = give: samples of the filter, seconds we want for t60 decay
+T60samps(samps, seconds) = 1/(10^((3*(((1000 / SR)*samps)/1000))/seconds));
+
+// (ms,seconds) = give: ms delay of the filter, seconds we want for t60 decay
+T60ms(ms,seconds) = 1/(10^((3*(ms/1000))/seconds));
 
 /*******************************************************************************
 * SAH : SAMPLE AND HOLD
@@ -130,9 +160,6 @@ tanh(g, ph) = ma.tanh(ph * g);
 // triangular function
 triangular(ph) = abs(ma.frac((ph - .5)) * 2.0 - 1.0);
 
-// softclipping via hyperbolic tangent function
-saturator(lim, x) = lim * tanh(1, x / (max(lim, EPS)));
-
 //----------------------------------------------------------- INTERPOLATIONS ---
 linInterpolate(x0, x1, delta) = x0 + delta * (x1-x0);
 siglinInterpol(order, x) = x : seq(r, order, interpolate)
@@ -148,31 +175,6 @@ bilinInterpolate(x0, x1, x0b, x1b, dt1, dt2) =
     with{
         linInterpolate(x0, x1, delta) = x0 + delta * (x1-x0);
     };
-
-//--------------------------------------------------------------- COVERSIONS ---
-// Conversions Formula: dB to a linear gain (0-1) and linear to dB
-linear2dB(G) = 20.0 * log10(max (ma.MIN, G));
-
-// linear to dB
-dB2linear(G) = pow(10.0, G/20.0);
-
-// milliseconds to samples
-ms2samp(t) = (t / 1000) * SR;
-
-// seconds to samples
-sec2samp(t) = t * SR;
-
-// (samps) = give tot. samples we want to know in milliseconds
-samps2ms(samps) = ((1000/SR) * samps) : int;
-
-// (meters) = give a distance in meters for samples of the filter
-meters2samps(meters) = ((SR/1000.) * ((1000*meters)/343.1) * 2);
-
-// (samps,seconds) = give: samples of the filter, seconds we want for t60 decay
-T60samps(samps, seconds) = 1/(10^((3*(((1000 / SR)*samps)/1000))/seconds));
-
-// (ms,seconds) = give: ms delay of the filter, seconds we want for t60 decay
-T60ms(ms,seconds) = 1/(10^((3*(ms/1000))/seconds));
 
 /************************************************************************
 ************************************************************************
@@ -518,12 +520,9 @@ HPButterworthN(N, cf, x) = cascade(N % 2)
 // https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html
 dcblocker(x) = x : ozf(-1) : pole(0.998);
 
-
-/************************************************************************
-************************************************************************
-- AUDIO INFORMATION PROCESSING -
-************************************************************************
-************************************************************************/
+/*******************************************************************************
+* AIP : AUDIO INFORMATION PROCESSING
+*******************************************************************************/
 
 //----------------------------------------------------------------- MAX PEAK ---
 // references: 1, 2
@@ -544,27 +543,40 @@ with{
 //process = _ * .2 : fixedNorm;
 
 //--------------------------------------------------- PEAK ENVELOPE FOLLOWER ---
-// references: 1, 2
-// Peak Envelope Follower with t60 Decay
-peakenvelope(t60, x) = abs(x) <: loop ~ _ * rt60(t60)
-    with{
-        loop(y,z) = y, z : max;
-        rt60(t) = 0.001 ^ ((1/SR) / t);
+peakenvelope(period, x) = loop ~ _
+    with {
+        loop(y) = max(abs(x), y * coeff);
+        twoPIforT = (2.0 * ma.PI) * (1.0 / ma.SR);
+        coeff = exp(-twoPIforT / max(EPS, period));
     };
-//process = peakenvelope(10);
 
-//---------------------------------------------- PEAK ENVELOPE NORMALIZATION ---
-// Fixed Peak Normalization with Decay
-peakNorm(seconds, x) = 1 / peakenvelope(seconds, x) * x;
+// Peak envelope. with attack and decay
+peakEnvAttRel(att, rel, x) = peakenvelope(rel - att, x) : 
+    LPTPT(1.0 / max(EPS, att));
 
 //----------------------------------------- MOVING AVERAGE ENVELOPE FOLLOWER ---
-movingAverage(seconds, x) = x - x@(seconds * SR) : 
-    fi.pole(1.0) / (seconds * SR);
+movingAverage(seconds, x) = x - x@(seconds * ma.SR) : 
+    fi.pole(1.0) / (seconds * ma.SR);
 //process = _ * 10 : movingAverage(1);
 
 //------------------------------------------------------- MOVING AVERAGE RMS ---
 movingAverageRMS(seconds, x) = sqrt(max(0, movingAverage(seconds, x ^ 2)));
 //process = movingAverageRMS(1);
+
+//-------------------------------------------------------------- PEAK HOLDER ---
+// holdTime in Seconds
+peakHolder(holdTime, x) = loop ~ si.bus(2) : ! , _
+with {
+    loop(timerState, outState) = timer , output
+    with {
+        isNewPeak = abs(x) >= outState;
+        isTimeOut = timerState >= (holdTime * ma.SR - 1);
+        bypass = isNewPeak | isTimeOut;
+        timer = ba.if(bypass, 0, timerState + 1);
+        output = ba.if(bypass, abs(x), outState);
+    };
+};
+
 
 //----------------------------------------------- ATTACK DECAY - RMS AVERAGE ---
 // references: 3
@@ -572,55 +584,31 @@ RMS(att, rel, x) = loop ~ _ : sqrt
     with {
         loop(y) = (1.0 - coeff) * x * x + coeff * y
             with {
-                attCoeff = exp(-2.0 * PI * ma.T / att);
-                relCoeff = exp(-2.0 * PI * ma.T / rel);
+                attCoeff = exp(-2.0 * ma.PI * ma.T / att);
+                relCoeff = exp(-2.0 * ma.PI * ma.T / rel);
                 coeff = ba.if(abs(x) > y, attCoeff, relCoeff);
             };
     };
-//process = os.osc(200) : RMS(10, 10);
 
-//----------------------------------------- ATTACK DECAY - RMS NORMALIZATION ---
-RMSNorm(att, dec, target, delSec, x) = 
-    (target / max(.000001, RMS(att, dec, x))) * 
-        x@(SR * delSec);  
-//process = os.osc(200) * 100 : RMSNorm(1, 1, .1, 1); 
 
-//-------------------------------------------------------------- PEAK HOLDER ---
-/*
-peakHolder(secondsPeriod, x) = y
-    letrec {
-        'y = ba.if(reset, abs(x), max(y, abs(x)));
-    }
-        with {
-            reset = os.phasor(1, 1.0 / secondsPeriod) : \(x).(x < x');
-        };
-*/
+//--------------------------------------------------------- DYNAMIC LIMITERS ---
+// lookahead limiter with: peakHolder, lowpass & peakenvelope
+// All the credits of the original version goes to Dario Sanfilippo 
+LookaheadLimiter(threshold, holdSec, decaySec, x) = 
+    (x : peakHolder(holdSec) : LPTPT(1/holdSec) : peakenvelope(decaySec)) : 
+        (min(1, threshold) / max(1, _)) * 
+            (x @ (holdSec * ma.SR)); 
 
-// holdTime in Seconds
-peakHolder(holdTime, x) = loop ~ si.bus(2) : ! , _
-with {
-    loop(timerState, outState) = timer , output
+//------------------------------------------------------ DYNAMIC COMPRESSION ---
+dynamiComp(i, k, att, rel, exponent, x) = 
+vgroup("dynaComp %i", (x * scaling) : hgroup("out %i", infoScale(k, -100, 100)))
     with {
-        isNewPeak = abs(x) >= outState;
-        isTimeOut = timerState >= (holdTime * SR - 1);
-        bypass = isNewPeak | isTimeOut;
-        timer = ba.if(bypass, 0, timerState + 1);
-        output = ba.if(bypass, abs(x), outState);
-    };
-};
-//process = _ : peakHolder(2);
+        complement(x) = 1.0 - x;
+        clipUni(x) = max(0.0, min(1.0, x));
+        scaling = ma.tanh(x) : peakEnvAttRel(att, rel) : 
+            clipUni : complement : pow(exponent : hgroup("exp %i", infoScale(k, -100, 100)));
+    };  
 
-//------------------------------------------------------- LOOKAHEAD LIMITING ---
-// references: 1, 4
-// peak-hold module with an exponential decay curve
-peakHoldwDecay(holdSeconds, frequencyCut, decayT60, x) = 
-    x : peakHolder(holdSeconds) : 
-        LPTPT(frequencyCut) : peakenvelope(decayT60);
-
-lookaheadLimiter(threshold, x) = ( x : peakHoldwDecay(.1, 1/.1, 10) ) : 
-    ( threshold / max(EPS, _) ) *
-        x @ (.1 * SR); 
-//process = _ * 100 : RMSNorm(10, 10, .10, 10) : lookaheadLimiter(.8);
 
 //------------------------------------------------------------ PITCH TRACKER ---
 // averaging function with 2pi time constant; t is the averaging time in seconds
@@ -629,7 +617,7 @@ avg(t, x) = y
         'y = x + alpha * (y - x);
     }
         with {
-            alpha = exp((-2.0 * PI * ma.T) / t);
+            alpha = exp((-2.0 * ma.PI * ma.T) / t);
         };
 
 // zero-crossing indicator function
@@ -645,12 +633,20 @@ zeroCrossingRate(t, x) = zeroCrossing(x) : avg(t);
 pitchTracker(t, x) = loop ~ _
     with {
         loop(y) = fi.lowpass(4, max(80, y), xHighpassed) :
-                  (zeroCrossingRate(t) * SR * .5)
+                  (zeroCrossingRate(t) * ma.SR * .5)
             with {
                 xHighpassed = fi.highpass(1, 20, x);
             };
     };
-//process = os.osc(1000) : pitchTracker(.5);
+
+// Resonant Frequency Suppressor
+resonKill(bypass, T, Q, x) = out
+with{
+    FC = pitchTracker(T, x);
+    filter = x - BPSVF(Q, FC, x);
+    out = filter * (1 - bypass) + x * bypass;
+};
+
 
 //---------------------------------------------------------------- LOCAL MAX ---
 localMax(seconds, x) = loop ~ si.bus(4) : _ , ! , ! , !
@@ -658,8 +654,8 @@ with {
     loop(yState, timerState, peakState, timeInSamplesState) = 
         y , timer , peak , timeInSamples
     with {
-        timeInSamples = ba.if(reset + 1 - 1', clip(1000, 0, seconds) * 
-            SR, timeInSamplesState);
+        timeInSamples = ba.if(reset + 1 - 1', limit(1000, 0, seconds) * 
+            ma.SR, timeInSamplesState);
         reset = timerState >= (timeInSamplesState - 1);
         timer = ba.if(reset, 1, timerState + 1);
         peak = max(abs(x), peakState * (1.0 - reset));
@@ -667,6 +663,39 @@ with {
     };
 };
 // process = localMax(4);
+
+/*******************************************************************************
+* NONLINEARITY
+*******************************************************************************/
+
+controlSignalProcessing(i, k, exponent, responseTime, x) = vgroup("cntrlSig %i",
+    xAverageSign * pow(abs(xAverageNormalisedSaturated) * .9, exponent) : hgroup("cntrl %i", infoScale(k, -1, 1)) :
+        os.osc : hgroup("cntrl Osc %i", infoScale(k, -1, 1))
+            : SAHDiffInvertion  : si.smoo : hgroup("cntrl Sah %i", infoScale(k, -1, 1))
+)
+with {
+    xAverage = x : seq(i, 4, LPTPT(1.0 / responseTime));
+    xAverageRMS = xAverage * xAverage : seq(i, 4, LPTPT(1.0 / (10.0 * responseTime))) : sqrt;
+    xAverageNormalised = xAverage / max(EPS, xAverageRMS);
+    xAverageNormalisedSaturated = ma.tanh(xAverageNormalised);
+    xAverageSign = ma.signum(xAverage);
+};
+
+//------------------------------------------------------- SAH DIFF INVERSION ---
+/*  Sample-and-hold signals whose slope changes sign over a certain 
+    period/ */
+SAHDiffInvertion(x) = loop ~ _
+    with {
+        loop(y) = ba.if(nonZeroDiff * nonZeroDiff' < .0, x, y);
+        nonZeroDiff = ba.sAndH(abs(diff(x)) > EPS, diff(x));
+        diff(x) = x - x';
+    };
+
+//----------------------------------------------------------- RELAY HYSTERON ---
+hysteron(alpha, beta, x) = loop ~ _
+    with {
+        loop(y) = ba.if(x < alpha, .0, ba.if(x > beta, 1.0, y));
+    };  
 
 /*******************************************************************************
 * RAW : READ AND WRITE TABLES
@@ -937,12 +966,9 @@ chunkGrains(voices, memSec, readSpeed, jumpFreq, chunkDim, x)=
 //process = _ <: chunkGrains(8, 4, 1, 4, .99);
 //pwg = hslider("slide",0,0,1,.001); ftg = hslider("freq.",0,0,100,.001);
 
-
-/************************************************************************
-************************************************************************
-- NETWORKS -
-************************************************************************
-************************************************************************/
+/*******************************************************************************
+* NETWORK
+*******************************************************************************/
 
 //----------------------------------------------------- VECTORIAL OPERATIONS ---
 // perform operations on an arbitrary number of vectors
