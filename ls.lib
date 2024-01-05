@@ -141,7 +141,7 @@ phasorOffset(f, offset) = f * (0 + 1') : + ~  _ % SR : (_ + offset * SR) % SR : 
 phasorScattering(f, pw, seed, ph) = 
     phasorOffset(f, sah(noise(seed), (ph < ph')) : abs) <: 
         _, _ * (((ph * -1) + 1) > pw);
-process = phasorScattering(100, .5, 123432, phasor(2));
+//process = phasorScattering(100, .5, 123432, phasor(2));
 
 // phasor with Phase Jitter : Internal Sinc Trig
 phasorScatteringSinc(f, fJitter, seed) = phasorOffset(f, sahNoise(fJitter, seed) : abs);
@@ -149,6 +149,10 @@ phasorScatteringSinc(f, fJitter, seed) = phasorOffset(f, sahNoise(fJitter, seed)
 // phasor with Phase Jitter Asinc
 phasorScatteringAsinc(f, minfJitter, maxfJitter, seed) = 
     phasorOffset(f, sahNoiseAsinc(minfJitter, maxfJitter, seed) : abs);
+
+// pulsetrain
+pulsetrain(f) = dirac + derivate(phasor(f));
+//process = pulsetrain(100);
 
 /*******************************************************************************
 * WINDOW FUNCTIONS
