@@ -137,22 +137,27 @@ phasorPH(f, reset) = f * (0 + 1') : + * (1 - reset) ~  _ % SR : _ / SR;
 // phasor with phase offset : 0 - 1
 phasorOffset(f, offset) = f * (0 + 1') : + ~  _ % SR : (_ + offset * SR) % SR : _ / SR;
 
-// phasor with Phase Jitter : Triger with Phasor or Ramp
-phasorScattering(f, pw, seed, ph) = 
-    phasorOffset(f, sah(noise(seed), (ph < ph')) : abs) <: 
-        _, _ * (((ph * -1) + 1) > pw);
-//process = phasorScattering(100, .5, 123432, phasor(2));
+// pulsetrain
+pulsetrain(f) = dirac + derivate(phasor(f));
 
-// phasor with Phase Jitter : Internal Sinc Trig
+// ramp : trigger with 1 sample trigger
+ramp(f, t) = (t == 0) * f : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
+rampms(ms, t) = (t == 0) * (1000 / ms) : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
+//process = pulsetrain(1) : rampms(1000);
+
+// phasor with Phase Jitter : trigger with 1 sample trigger
+phasorScattering(f, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs);
+//process = pulsetrain(40) <: phasorScattering(500, 123432);
+
+// phasor with Phase Jitter + Pulse Width in MS : trigger with 1 sample trigger
+phasorScatteringPW(f, pwms, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs) * (rampms(pwms, t) > 0);
+//process = pulsetrain(4) <: phasorScatteringPW(500, 100, 123432);
+
+// phasor with Phase Jitter : Internal Sinchronous 
 phasorScatteringSinc(f, fJitter, seed) = phasorOffset(f, sahNoise(fJitter, seed) : abs);
 
 // phasor with Phase Jitter Asinc
-phasorScatteringAsinc(f, minfJitter, maxfJitter, seed) = 
-    phasorOffset(f, sahNoiseAsinc(minfJitter, maxfJitter, seed) : abs);
-
-// pulsetrain
-pulsetrain(f) = dirac + derivate(phasor(f));
-//process = pulsetrain(100);
+phasorScatteringAsinc(f, minfJitter, maxfJitter, seed) = phasorOffset(f, sahNoiseAsinc(minfJitter, maxfJitter, seed) : abs);
 
 /*******************************************************************************
 * WINDOW FUNCTIONS
