@@ -27,6 +27,9 @@ MAX = ma.MAX;
 // MAX = 1.7976931348623158e+308;
 MIN = ma.MIN;
 // MIN = 2.2250738585072014e-308;
+HUR = 20000;
+// highest udible range
+
 
 /*******************************************************************************
 * SIGNALS
@@ -102,14 +105,31 @@ sah(x, t) = selector(t, _, x) ~ _;
 sahSinc(f, x) = selector(phasor(f) : derivate, _, x) ~ _;
 
 // asinchronous sah with clock in feedback (via FM)
-sahAsinc(minHz, maxHz, y) = out ~ _
+sahAsinc(f1, f2, y) = out ~ _
 with{
     ph(f, modf) = (f + modf : + ~ _ % ma.SR) / ma.SR;
     trigger(x) = x < x';
     iniTrig = 1 - 1';
-    out(x) = (minHz, abs(x * (maxHz - minHz))) : ph : trigger : (_ + iniTrig, x, y) : 
+    fMin = min(f1, f2);
+    fMax = max(f1, f2);
+    out(x) = (fMin, abs(x * (fMax - fMin))) : ph : trigger : (_ + iniTrig, x, y) : 
                 selector;
 };
+//process = sahAsinc(1000, 10, no.noise);
+
+// asinchronous sah with clock in feedback (via FM)
+sahAsincPW(f1, f2, fw, y) = out ~ _ <: _, (_ <: _, window)
+with{
+    ph(f, modf) = (f + modf : + ~ _ % ma.SR) / ma.SR;
+    trigger(x) = x < x';
+    iniTrig = 1 - 1';
+    fMin = min(f1, f2);
+    fMax = max(f1, f2);
+    out(x) = (fMin, abs(x * (fMax - fMin))) : ph : trigger <: ((_ + iniTrig, x, y) : 
+                selector), _;
+    window(t) = (t == 0) * fw : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
+};
+//process = sahAsincPW(100, 1000, 1000, no.noise);
 
 // pseudo-random noise with linear congruential generator (LCG)
 noise(initSeed) = lcg ~ _ : (_ / m)
@@ -146,7 +166,7 @@ rampms(ms, t) = (t == 0) * (1000 / ms) : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
 //process = pulsetrain(1) : rampms(1000);
 
 // phasor with Phase Jitter : trigger with 1 sample trigger
-phasorScattering(f, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs);
+phasorScattering(f, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs); 
 //process = pulsetrain(40) <: phasorScattering(500, 123432);
 
 // phasor with Phase Jitter + Pulse Width in MS : trigger with 1 sample trigger
@@ -418,14 +438,15 @@ modapf(delsamples, samplesmod, freqmod, apcoeff) = ( + : _ <:
     };
 //process = 1-1' : +@(SR/100) ~ _ <: _, modapf(1000, 500, .12, .5);
 
-//---------------------------------------------------------------------- SVF TPT
-// SVFTPT filter function
-// TPT version of the SVF Filter by Vadim Zavalishin
-// reference : (by Will Pirkle)
-// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
+
+/*******************************************************************************
+* SVF : STATE VARIABLE FILTERS
+*******************************************************************************/
+
+// Vadim Zavalishin's SVF TPT filter (Topology Preserving Transform)
 SVFTPT(Q, cf, x) = loop ~ si.bus(2) : (! , ! , _ , _ , _ , _ , _)
     with {
-        g = tan(cf * PI * ma.T);
+        g = tan(cf * ma.PI * ma.T);
         R = 1.0 / (2.0 * Q);
         G1 = 1.0 / (1.0 + 2.0 * R * g + g * g);
         G2 = 2.0 * R + g;
@@ -441,51 +462,83 @@ SVFTPT(Q, cf, x) = loop ~ si.bus(2) : (! , ! , _ , _ , _ , _ , _)
             };
     };
 
-LPSVF(Q, cf, x) = SVFTPT(Q, cf, x) : (_ , ! , ! , ! , !);
+// HP - LP SVF 
+LPSVFTPT(Q, cf, x) = SVFTPT(Q, cf, x) : (_ , ! , ! , ! , !);
+HPSVFTPT(Q, cf, x) = SVFTPT(Q, cf, x) : (! , _ , ! , ! , !);
 
-HPSVF(Q, cf, x) = SVFTPT(Q, cf, x) : (! , _ , ! , ! , !);
+// Normalized Bandpass SVF 
+BPSVFTPT(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , _ , ! , !);
 
-BPSVF(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , _ , ! , !);
+NotchSVFTPT(Q, cf, x) = x - BPSVF(Q, cf, x);
+APSVFTPT(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , ! , _ , !);
+PeakingSVFTPT(Q, cf, x) = LPSVF(Q, cf, x) - HPSVF(Q, cf, x);
+BP2SVFTPT(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , ! , ! , _);
 
-NotchSVF(Q, cf, x) = x - BPSVF(Q, cf, x);
+// Bandpass Bandwidth SVF
+BPBWSVFTPT(BW, CF, x) = BPSVF(clip(20000, EPS, (CF / BW)), CF, x);
 
-APSVF(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , ! , _ , !);
 
-PeakingSVF(Q, cf, x) = LPSVF(Q, cf, x) - HPSVF(Q, cf, x);
+// Optimized BP from the TPT version of the SVF Filter by Vadim Zavalishin
+// Bandpass Bandwidth SVF
+BPTPTOptimized(gf, bw, cf, x) = loop ~ si.bus(2) : (! , ! , _ * gf)
+with {
+    g = tan(cf * ma.PI * (1.0/ma.SR));
+    Q = cf / max(ma.EPSILON, bw);
+    R = 1.0 / (Q + Q);
+    G = 1.0 / (1.0 + 2.0 * R * g + g * g);
+    loop(s1, s2) = u1 , u2 , bp
+        with {
+            bp = (g * (x - s2) + s1) * G;
+            bp2 = bp + bp;
+            v2 = bp2 * g;
+            u1 = bp2 - s1;
+            u2 = v2 + s2;
+        };
+};
 
-BP2SVF(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , ! , ! , _);
-
-BPBWSVF(BW, CF, x) = BPSVF(clip(20000, minimum, (CF / BW)), CF, x);
-// process = BPBWSVF(10, 1000, noise(1234));
-
-// Usa .707 come Q per LP e HP. BPSVF è quello normalizzato.
-//process = no.noise : BPSVF(10, 1000);
-
-// Zavalishin's SVF BP FILTER
-// optimized BP from the TPT version of the SVF Filter by Vadim Zavalishin
-// reference : (by Will Pirkle)
-// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
-BPSVFTPT(glin, bw, cf, x) = loop ~ si.bus(2) : (! , ! , _)
+// Normalized Bandpass SVF TPT
+BPTPTNormalized(gf, bw, cf, x) = loop ~ si.bus(2) : (! , ! , _ * gf)
     with {
-        g = tan(cf * PI * (1.0/SR));
-        Q = cf / max(EPS, bw);
-        R = 1.0 / (Q + Q);
-        G = 1.0 / (1.0 + 2.0 * R * g + g * g);
-        loop(s1, s2) = u1 , u2 , bp * glin
+        g = tan(cf * ma.PI * ma.T);
+        R = 1.0 / (2.0 * bw);
+        G1 = 1.0 / (1.0 + 2.0 * R * g + g * g);
+        G2 = 2.0 * R + g;
+        loop(s1, s2) = u1 , u2 , bp * 2.0 * R
             with {
-                bp = (g * (x - s2) + s1) * G;
-                bp2 = bp + bp;
-                v2 = bp2 * g;
-                u1 = bp2 - s1;
-                u2 = v2 + s2;
+                hp = (x - s1 * G2 - s2) * G1;
+                v1 = hp * g;
+                bp = s1 + v1;
+                v2 = bp * g;
+                lp = s2 + v2;
+                u1 = v1 + bp;
+                u2 = v2 + lp;
             };
     };
 
-//------------------------------------------------------------------ ONEPOLE TPT
-// Zavalishin Onepole TPT Filter
-// TPT version of the One-Pole Filter by Vadim Zavalishin
-// reference : (by Will Pirkle)
-// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
+// Robert Bristow-Johnson's Biquad Filter - Direct Form 1
+BPBiquad(g, q, f) = biquadFilter : _ * g
+    with{
+        biquadFilter = _ <: _, (mem  <: (_, mem)) : (_ * a0, _ * a1, _ * a2) :> _ : 
+                            ((_, _) :> _) ~ (_ <: (_, mem) : (_ * -b1, _ * -b2) :> _);
+        F = max(ma.EPSILON, min(20000,  f));
+        Q = max(ma.EPSILON, min(ma.MAX, q));
+        K = tan(ma.PI * F / ma.SR);
+        norm = 1 / (1 + K / Q + K * K);
+        a0 = K / Q * norm;
+        a1 = 0;
+        a2 = -a0;
+        b1 = 2 * (K * K - 1) * norm;
+        b2 = (1 - K / Q + K * K) * norm;
+    };
+
+//process = no.noise <: BPTPTNormalized(4, 1000, 4000), BPTPTOptimized(.01, 1, 4000), BPBiquad(4, 10000, 4000), BPSVFTPT(1000, 4000) * 4;
+
+
+/*******************************************************************************
+* ONEPOLE & BUTTERWORTH FILTERS
+*******************************************************************************/
+
+// Vadim Zavalishin's Onepole TPT Filter (Topology Preserving Transform) 
 onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
     with {
         g = tan(cf * PI * ma.T);
@@ -496,16 +549,15 @@ onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
             };
     };
 
-// Lowpass  TPT
+// Lowpass and Highpass TPT
 LPTPT(cf, x) = onePoleTPT(cf, x) : (_ , ! , !);
-
-// Highpass TPT
 HPTPT(cf, x) = onePoleTPT(cf, x) : (! , _ , !);
 
 // Allpass TPT
 APTPT(cf, x) = onePoleTPT(cf, x) : (!, !, _);
 
-//-------------------------------------------------------------- BUTTERWORTH ---
+
+// BUTTERWORTH
 butterworthQ(order, stage) = qFactor(order % 2)
     with {
         qFactor(0) = 1.0 / (2.0 * cos(((2.0 * stage + 1) *
@@ -531,9 +583,10 @@ HPButterworthN(N, cf, x) = cascade(N % 2)
     };
 // process = HPButterworthN(4, 10000, noise(1234));
     
-//------------------------------------------------------------------- DC BLOCKER
-// https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html
+
+// DC BLOCKER - https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html
 dcblocker(x) = x : ozf(-1) : pole(0.998);
+
 
 /*******************************************************************************
 * AIP : AUDIO INFORMATION PROCESSING
@@ -737,35 +790,40 @@ with{
     buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
 };
 
-walkergrains(i) = vgroup("looper", buffer)
+walkergrains(i, record, tapeLSec, fread, fjitter, fjitasinc, fwindow, x) = 
+(x : vgroup("looper", buffer)) * (readPhasor : (!, _)) + * (1 - (readPhasor : (!, _)))
 with{
     offset = 2;
     LengthSecMax = 10;
+    // sahAsincPW(f1, f2, fw, y)
     // phasor with random reverse
-    phasorReverse(f, minSF, maxSF, seed) =   int ~  (_ + 1' * 
-                                        (sahAsinc(minSF, maxSF, noise(seed)) : signum)) % 
-                                        (SR / f) : _ * f : _ / SR : abs;
+    phasorScatteringX(f, fJitSinc, fAsinc, fWin, seed) = ph, window
+        with{
+            random = sahAsincPW(fJitSinc, fAsinc, fWin, noise(seed));
+            ph = phasorOffset(f, abs(random : (_, !, !)));
+            window = (random : (!, !, _)) > 0;
+        };
+    phasorReverse(f, minSF, maxSF, seed) = int ~  (_ + 1' * (sahAsinc(minSF, maxSF, noise(seed)) : signum)) % (SR / f) : _ * f : _ / SR : abs;
+    readPhasor = phasorScatteringX(1 / lengthSec, mnsf, mxsf, fwindow, i * 1324);
+
     info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
-    cgui(x) = vgroup("controls", x);
-    kgui(x) = hgroup("knobs", x);
-    readSpeed = cgui(kgui(4 ^ 
-                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
-    lengthSec = cgui(kgui(
-                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1) : int));
+    readSpeed = fread;
+    lengthSec = clip(0.001, 10, tapeLSec) : int;
     recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
                 hgroup("writing %i", info(1, 0, 1))) ~ 
                 * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
-    mxsf = hslider("max dv[style:knob]",100, 1, 100, .001);
-    mnsf = hslider("min dv[style:knob]",1.0, 1, 100, .001);
-    readIndex = phasorReverse(1/lengthSec, mnsf, mxsf, i) :
+    mxsf = clip(.001, 1000, fjitter);
+    mnsf = clip(.001, 1000, mxsf + fjitasinc);
+    readIndex = (readPhasor : (_, !)) :
                 hgroup("reading %i", info(1, 0, 1))
                 * (float(SR * lengthSec)) : int;    randomsah(minF, maxF, y) = out ~ _ with{
         out(x) =    (minF, abs(x * (maxF - minF))) :> 
                 phasor : dirac : (_ + dirac, x, y) : selector;
     };
-    record =    cgui(checkbox("[1]Record") : int);
-    buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
+    buffer = rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
 };
+//process = walkergrains(1, 1, 2, 10, 4, 8, 100, _); // ~ fi.dcblocker * 1; 
+//process = _ <: ((ro.interleave(N, N / 2), si.bus(N)) :> si.bus(N) : par(i, N, walkergrains(1 + i, 1, 2) : fi.dcblocker)) ~ (si.bus(N) :> (_ / N) * 1.25 <: si.bus(N)) with{N = 4;};
 
 looperJitterSinc(i, y) = vgroup("looper", buffer ~ _ * fb)
 with{
