@@ -1,0 +1,25 @@
+/*******************************************************************************
+* PLS : PULSE SIGNALS GENERATION
+*******************************************************************************/
+import("ls.lib");
+
+// Dirac Impulse at Compile Time
+dirac = 1 - (1 : mem);
+
+// Synchronous pulse train in HZ
+pulseTrain(f) = f : phasorPulse
+with{
+    phPulse(x) = (x < x') + dirac;
+    phasorPulse = (_ : + ~ _ % ma.SR) / ma.SR : phPulse;
+};
+// process = pulseTrain(100);
+
+// asynchronous pulse train in HZ
+asincPulseTrain(f1, f2, seed) = phasorPulse ~ ((noise(seed), _) : sah : abs : (_ * fMax + fMin))
+with{
+    fMin = min(f1, f2);
+    fMax = max(f1, f2);
+    phPulse(x) = (x < x') + dirac;
+    phasorPulse = (_ : + ~ _ % ma.SR) / ma.SR : phPulse;
+};
+// process = asincPulseTrain(1, 100, 1457), asincPulseTrain(1, 100, 8937);
