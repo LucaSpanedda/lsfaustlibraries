@@ -9,6 +9,9 @@ linear2dB(x) = 20.0 * log10(max (MIN, x));
 // linear to dB
 dB2linear(x) = pow(10.0, x / 20.0);
 
+// frequency (Hz) to seconds
+f2sec(f) = 1 / f;
+
 // milliseconds to samples
 ms2samp(t) = (t / 1000) * SR;
 

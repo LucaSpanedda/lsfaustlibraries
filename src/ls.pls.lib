@@ -7,19 +7,10 @@ import("ls.lib");
 dirac = 1 - (1 : mem);
 
 // Synchronous pulse train in HZ
-pulseTrain(f) = f : phasorPulse
-with{
-    phPulse(x) = (x < x') + dirac;
-    phasorPulse = (_ : + ~ _ % ma.SR) / ma.SR : phPulse;
-};
-// process = pulseTrain(100);
+pulseTrain(f) = phasor0(f) : derivate + dirac;
 
-// asynchronous pulse train in HZ
-asincPulseTrain(f1, f2, seed) = phasorPulse ~ ((noise(seed), _) : sah : abs : (_ * fMax + fMin))
-with{
-    fMin = min(f1, f2);
-    fMax = max(f1, f2);
-    phPulse(x) = (x < x') + dirac;
-    phasorPulse = (_ : + ~ _ % ma.SR) / ma.SR : phPulse;
-};
-// process = asincPulseTrain(1, 100, 1457), asincPulseTrain(1, 100, 8937);
+// Synchronous pulse train in HZ with width in samples
+pwTrain(f, samps) = ((phasor0(f) * SR) - (f * samps)) < 0;
+
+// asynchronous pulse train in HZ : fBase = standard frequency, fMod = -/+ asynchronous deviation
+asincPulseTrain(fBase, fMod, seed) = (phasor0 : derivate) ~ ((noise(seed), _ + dirac) : sah : abs : (_ * max(- fBase + 1, fMod) + fBase)) : _ + dirac;

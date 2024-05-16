@@ -1,0 +1,36 @@
+/*******************************************************************************
+* PHASOR
+*******************************************************************************/
+import("ls.lib");
+
+// classic phasor
+phasor(f) = f : + ~  _ % SR : _ / SR;
+
+// phasor that start from 0
+phasor0(f) = (_ <: _ + f, _) ~  _ % SR : (!, _ / SR);
+//process = phasor(1), phasor0(1);
+
+// phasor with phase reset
+phasorPH(f, reset) = f * (0 + 1') : + * (1 - reset) ~  _ % SR : _ / SR;
+
+// phasor with phase offset : 0 - 1
+phasorOffset(f, offset) = f * (0 + 1') : + ~  _ % SR : (_ + offset * SR) % SR : _ / SR;
+
+// ramp : trigger with 1 sample trigger
+ramp(f, t) = (t == 0) * f : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
+rampms(ms, t) = (t == 0) * (1000 / ms) : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
+//process = pulsetrain(1) : rampms(1000);
+
+// phasor with Phase Jitter : trigger with 1 sample trigger
+phasorScattering(f, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs); 
+//process = pulsetrain(40) <: phasorScattering(500, 123432);
+
+// phasor with Phase Jitter + Pulse Width in MS : trigger with 1 sample trigger
+phasorScatteringPW(f, pwms, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs) * (rampms(pwms, t) > 0);
+//process = pulsetrain(4) <: phasorScatteringPW(500, 100, 123432);
+
+// phasor with Phase Jitter : Internal Sinchronous 
+phasorScatteringSinc(f, fJitter, seed) = phasorOffset(f, sahNoise(fJitter, seed) : abs);
+
+// phasor with Phase Jitter Asinc
+phasorScatteringAsinc(f, minfJitter, maxfJitter, seed) = phasorOffset(f, sahNoiseAsinc(minfJitter, maxfJitter, seed) : abs);

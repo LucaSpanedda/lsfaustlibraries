@@ -10,4 +10,7 @@ selector(sel, x, y) = x * (1 - sel) + y * (sel);
 sah(x, t) = selector(t, _, x) ~ _;
 
 // sample and hold with internal trigger
-sahSinc(f, x) = selector(phasor(f) : derivate, _, x) ~ _;
+sahSinc(f, x) = (x, pulseTrain(f)) : sah;
+
+// asynchronous pulse train in HZ : fBase = standard frequency, fMod = -/+ asynchronous deviation
+sahAsinc(fBase, fMod, seed, x) = (x, asincPulseTrain(fBase, fMod, seed)) : sah;

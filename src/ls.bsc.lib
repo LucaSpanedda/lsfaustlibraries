@@ -3,9 +3,6 @@
 *******************************************************************************/
 import("ls.lib");
 
-// Dirac Impulse at Compile Time
-dirac = 1 - (1 : mem);
-
 // clipping functions                      
 clip(low, high, x) = max(low, min(high, x));  
 limit(low, high, x) = clip(low, high, x);
@@ -19,6 +16,9 @@ signum(x) = (x > 0) - (x < 0);
 // Unipolar to bipolar
 uni2bi(x) = x * 2.0 - 1.0;
 
+// Bipolar to unipolar
+bi2uni(x) = (x + 1) * 0.5;
+
 // only decimal pass
 decimal(x) = x - int(x);
 
@@ -29,4 +29,4 @@ integer(x) = int(x);
 derivate(x) = x < x';
 
 // shift in phase (0 to 1) giving only the fractional part of x
-wrap(ph, x) = x <: (_ + ph) - int(_ + ph);
+phwrap(ph, x) = x <: (_ + ph) - int(_ + ph);

@@ -9,3 +9,9 @@ with{
     a = 18446744073709551557; c = 12345; m = 2 ^ 31; 
     lcg(seed) = ((a * seed + c) + (initSeed - initSeed') % m);
 };
+
+// sah noise
+sahNoise(f, seed) = sahSinc(f, noise(seed));
+
+// sah noise asinc
+sahNoiseAsinc(fBase, fMod, seed) = sahAsinc(fBase, fMod, seed, noise(seed));

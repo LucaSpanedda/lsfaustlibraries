@@ -1,0 +1,34 @@
+/*******************************************************************************
+* FTS : DIGITAL FILTERS
+*******************************************************************************/
+import("ls.lib");
+
+
+// onezero, g = give amplitude 0 to +/- 1 (open - close) to the delayed signal 
+oz(g) = _ <: (_ : mem * g), _ :> +; 
+//process = no.noise : oz(1); 
+
+// onepole, g = give amplitude 0 to +/- 1 (open - close) to the delayed signal 
+op(g) = _ * (1 - abs(g)) : + ~ (_ : * (g));
+//process = no.noise : op(-0.999);
+
+// only the pole section
+pole(g) = + ~ * (g);
+//process = no.noise : pole(.95);
+
+opfc(FC, x) = _ * G : + ~ (_ : * (1 - G))
+    with{
+        K(x) = x / (1.0 + x);
+        G = tan(FC * PI / SR) : K;
+    };
+
+//process = no.noise : opfc((1 / 10));
+
+// onepole in seconds / smooth function
+opsec(sec) = opfc(f2sec(sec), _);
+smooth(sec) = opsec(sec);
+//process = no.noise : smooth(10);
+
+// (t,g) = delay time in samples, filter gain 0-1 
+ffcf(t, g, x) = (x@(t) * g), x :> +; 
+//process = _ * .1 : ffcf(100, 1); 
