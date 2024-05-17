@@ -1,4 +1,4 @@
-# Spanedda-Faustlibraries
+# lsfaustlibraries
 Luca Spanedda's Faust libraries
 
 
