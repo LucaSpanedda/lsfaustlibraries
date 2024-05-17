@@ -1,0 +1,83 @@
+/*******************************************************************************
+* NETWORKS
+*******************************************************************************/
+import("ls.lib");
+
+// Vectorial Operations
+// perform operations on an arbitrary number of vectors
+vecOp(vectorsList, op) =
+    vectorsList : seq(i, vecDim - 1, vecOp2D , vecBus(vecDim - 2 - i))
+    with {
+        vecBus(0) = par(i, vecLen, 0 : !);
+        vecBus(dim) = par(i, dim, si.bus(vecLen));
+        vecOp2D = ro.interleave(vecLen, 2) : par(i, vecLen, op);
+        vecDim = outputs(vectorsList) / vecLen;
+        vecLen = outputs(ba.take(1, vectorsList));
+    };
+
+// Matrixes 
+// vector FDN Matrix
+vecMx(N, list) = si.bus(N) <: par(i, N, (vecOp((si.bus(N), list), *) :> +));
+
+vecMatrix(N) = si.bus(N) <: par(i, N, (vecOp((si.bus(N), list(i+1)), *) :> +))
+with{
+    list(1) = 1, 0, 0, 0;
+    list(2) = 0, 1, 0, 0;
+    list(3) = 0, 0, 1, 0;
+    list(4) = 0, 0, 0, 1;
+    list(5) = 1, 0, 0, 0;
+    list(6) = 0, 1, 0, 0;
+    list(7) = 0, 0, 1, 0;
+    list(8) = 0, 0, 0, 1;
+};
+//process = vecMatrix(4);
+
+// fully connected FDN Matrix
+fullyconnectedMx(N) =  vecMx(N, par(i, N, 1));
+fullyconnectedMxNormalized(N) =  vecMx(N, par(i, N, 1/N));
+//process = fullyconnectedMxNormalized(4);
+
+// hadamard FDN Matrix
+butterfly(2) = si.bus(2) <: +, -;
+butterfly(N) = si.bus(N) <: ro.interleave(N/2,2), ro.interleave(N/2,2) : par(i, N/2, +), par(i, N/2, -);
+hadamard(2) = butterfly(2);
+hadamard(N) = butterfly(N) : (hadamard(N/2), hadamard(N/2));
+//process = hadamard(8);
+
+// Normalized hadamard FDN Matrix
+hadamardcoeff(N) = par(i, N, 1.0 / sqrt(N)); 
+hadamardNormalized(N) = vecOp((hadamard(N) , hadamardcoeff(N)), *);
+//process = hadamardNormalized(8);
+
+// Networks
+FDNfullyconnected(N, D, G) = (vecOp((si.bus(N) , si.bus(N)), +) : 
+    vecOp((si.bus(N), par(i, N, D * SR - 1)), @)) ~
+        (fullyconnectedMxNormalized(N));
+//process = FDNfullyconnected(4, 1, 1);
+
+FDNhadamard(N, D, G) = (vecOp((si.bus(N) , si.bus(N)), +) : 
+    vecOp((si.bus(N), par(i, N, D * SR - 1)), @)) ~
+        (hadamardNormalized(N));
+//process = FDNhadamard(4, 1, 1);
+
+FDNsingleLoop(N, D, G) = (vecOp((si.bus(N) , si.bus(N)), +) : 
+    vecOp((si.bus(N), par(i, N, D * SR - 1)), @)) ~ ro.crossNM(N-1, 1);
+//process = FDNsingleLoop(8, 1, 1);
+
+FDNmatrix(N, D, G) = (vecOp((si.bus(N) , si.bus(N)), +) : 
+    vecOp((si.bus(N), par(i, N, D * SR - 1)), @)) ~ (vectorMatrix(N))
+with{
+    vectorMatrix(N) = si.bus(N) <: 
+        par(i, N, (vecOp((si.bus(N), list(i+1)), *) :> +))
+    with{
+        list(1) = 1, 0, 0, 0;
+        list(2) = 0, 1, 0, 0;
+        list(3) = 0, 0, 1, 0;
+        list(4) = 0, 0, 0, 1;
+        list(5) = 1, 0, 0, 0;
+        list(6) = 0, 1, 0, 0;
+        list(7) = 0, 0, 1, 0;
+        list(8) = 0, 0, 0, 1;
+    };
+};
+//process = FDNmatrix(4, 1, 1);

@@ -1,0 +1,136 @@
+/*******************************************************************************
+* AIP : AUDIO INFORMATION PROCESSING
+*******************************************************************************/
+import("ls.lib");
+
+// Max Peak of the signal
+// Peak Max with IIR filter and max comparison
+peakmax(x) = loop ~_
+with{
+    loop(y) = abs(x) , y : max;
+};
+//process = _ : peakmax;
+
+// Peak Max Normalization
+fixedNorm(x) = 1 / (x : loop ~ _) * x
+with{
+    loop(y,z) = ( (y, abs(z) ) : max);
+};
+//process = _ * .2 : fixedNorm;
+
+// Peak Envelope Follower
+peakenvelope(period, x) = loop ~ _
+    with {
+        loop(y) = max(abs(x), y * coeff);
+        twoPIforT = (2.0 * ma.PI) * (1.0 / ma.SR);
+        coeff = exp(-twoPIforT / max(EPS, period));
+    };
+
+// Peak envelope. with attack and decay
+peakEnvAttRel(att, rel, x) = peakenvelope(rel - att, x) : 
+    LPTPT(1.0 / max(EPS, att));
+
+// Moving Average Envelope Follower
+movingAverage(seconds, x) = x - x@(seconds * ma.SR) : 
+    fi.pole(1.0) / (seconds * ma.SR);
+//process = _ * 10 : movingAverage(1);
+
+// Moving Average RMS
+movingAverageRMS(seconds, x) = sqrt(max(0, movingAverage(seconds, x ^ 2)));
+//process = movingAverageRMS(1);
+
+// PeakHolder - holdTime in Seconds
+peakHolder(holdTime, x) = loop ~ si.bus(2) : ! , _
+with {
+    loop(timerState, outState) = timer , output
+    with {
+        isNewPeak = abs(x) >= outState;
+        isTimeOut = timerState >= (holdTime * ma.SR - 1);
+        bypass = isNewPeak | isTimeOut;
+        timer = ba.if(bypass, 0, timerState + 1);
+        output = ba.if(bypass, abs(x), outState);
+    };
+};
+
+// Attack and Decay RMS Average
+RMS(att, rel, x) = loop ~ _ : sqrt
+    with {
+        loop(y) = (1.0 - coeff) * x * x + coeff * y
+            with {
+                attCoeff = exp(-2.0 * ma.PI * ma.T / att);
+                relCoeff = exp(-2.0 * ma.PI * ma.T / rel);
+                coeff = ba.if(abs(x) > y, attCoeff, relCoeff);
+            };
+    };
+
+// lookahead limiter with: peakHolder, lowpass & peakenvelope
+// All the credits of the original version goes to Dario Sanfilippo 
+LookaheadLimiter(threshold, holdSec, decaySec, x) = 
+    (x : peakHolder(holdSec) : LPTPT(1/holdSec) : peakenvelope(decaySec)) : 
+        (min(1, threshold) / max(1, _)) * 
+            (x @ (holdSec * ma.SR)); 
+
+// Dynamic Comnpressor
+dynamiComp(i, k, att, rel, exponent, x) = 
+vgroup("dynaComp %i", (x * scaling) : hgroup("out %i", infoScale(k, -100, 100)))
+    with {
+        complement(x) = 1.0 - x;
+        clipUni(x) = max(0.0, min(1.0, x));
+        scaling = ma.tanh(x) : peakEnvAttRel(att, rel) : 
+            clipUni : complement : pow(exponent : hgroup("exp %i", infoScale(k, -100, 100)));
+    };  
+
+
+// Pitch Tracker
+// averaging function with 2pi time constant; t is the averaging time in seconds
+avg(t, x) = y
+    letrec {
+        'y = x + alpha * (y - x);
+    }
+        with {
+            alpha = exp((-2.0 * ma.PI * ma.T) / t);
+        };
+
+// zero-crossing indicator function
+zeroCrossing(x) = (x * x') < 0;
+
+// zero-crossing rate
+zeroCrossingRate(t, x) = zeroCrossing(x) : avg(t);
+
+// pitch tracker as zero-crossing rate of self-regulating lowpassed inputs
+// we highpass the input to avoid infrasonic
+// components to affect the measurements
+// we then clip the lowpass cutoff to improve stability
+pitchTracker(t, x) = loop ~ _
+    with {
+        loop(y) = fi.lowpass(4, max(80, y), xHighpassed) :
+                  (zeroCrossingRate(t) * ma.SR * .5)
+            with {
+                xHighpassed = fi.highpass(1, 20, x);
+            };
+    };
+
+// Resonant Frequency Suppressor
+resonKill(bypass, T, Q, x) = out
+with{
+    FC = pitchTracker(T, x);
+    filter = x - BPSVF(Q, FC, x);
+    out = filter * (1 - bypass) + x * bypass;
+};
+
+
+// Local Max
+localMax(seconds, x) = loop ~ si.bus(4) : _ , ! , ! , !
+with {
+    loop(yState, timerState, peakState, timeInSamplesState) = 
+        y , timer , peak , timeInSamples
+    with {
+        timeInSamples = ba.if(reset + 1 - 1', limit(1000, 0, seconds) * 
+            ma.SR, timeInSamplesState);
+        reset = timerState >= (timeInSamplesState - 1);
+        timer = ba.if(reset, 1, timerState + 1);
+        peak = max(abs(x), peakState * (1.0 - reset));
+        y = ba.if(reset, peak', yState);
+    };
+};
+// process = localMax(4);

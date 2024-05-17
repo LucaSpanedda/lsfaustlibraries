@@ -1,0 +1,24 @@
+/*******************************************************************************
+* SAH : SAMPLE AND HOLD
+*******************************************************************************/
+import("ls.lib");
+
+// binary selector
+selector(sel, x, y) = x * (1 - sel) + y * (sel);
+
+// a classic sample and hold
+sah(x, t) = selector(t, _, x) ~ _;
+
+// sample and hold with internal trigger
+sahSinc(f, x) = (x, pulseTrain(f)) : sah;
+
+// asynchronous pulse train in HZ : fBase = standard frequency, fMod = -/+ asynchronous deviation
+sahAsinc(fBase, fMod, seed, x) = (x, asincPulseTrain(fBase, fMod, seed)) : sah;
+
+// Sample-and-hold signals whose slope changes sign over a certain period
+SAHDiffInvertion(x) = loop ~ _
+    with {
+        loop(y) = ba.if(nonZeroDiff * nonZeroDiff' < .0, x, y);
+        nonZeroDiff = ba.sAndH(abs(diff(x)) > EPS, diff(x));
+        diff(x) = x - x';
+    };

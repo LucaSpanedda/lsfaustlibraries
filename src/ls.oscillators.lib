@@ -1,0 +1,174 @@
+/*******************************************************************************
+* PHASORS
+*******************************************************************************/
+import("ls.lib");
+
+// classic phasor
+phasor(f) = f : + ~  _ % SR : _ / SR;
+
+// phasor that start from 0
+phasor0(f) = (_ <: _ + f, _) ~  _ % SR : (!, _ / SR);
+//process = phasor(1), phasor0(1);
+
+// phasor with phase reset
+phasorPH(f, reset) = (_ <: _ + f, _) ~  (_ % SR : _ * (1 - reset)) : (!, _ / SR);
+
+// phasor with phase offset : 0 - 1
+phasorOffset(f, offset) = (_ <: _ + f, _) ~  _ % SR : (!, _) : (_ + offset * SR) % SR : _ / SR;
+
+// ramp : trigger with 1 sample trigger
+ramp(f, t) = (t == 0) * f : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
+rampms(ms, t) = (t == 0) * (1000 / ms) : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
+
+// phasor with Phase Jitter : trigger with 1 sample trigger
+phasorScattering(f, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs); 
+
+
+/*******************************************************************************
+* PLS : PULSE SIGNALS GENERATION
+*******************************************************************************/
+
+// Dirac Impulse at Compile Time
+dirac = 1 - (1 : mem);
+
+// Synchronous pulse train in HZ
+pulseTrain(f) = phasor0(f) : derivate + dirac;
+
+// Synchronous pulse train in HZ with width in samples
+pwTrain(f, samps) = ((phasor0(f) * SR) - (f * samps)) < 0;
+
+// asynchronous pulse train in HZ : fBase = standard frequency, fMod = -/+ asynchronous deviation
+asincPulseTrain(fBase, fMod, seed) = (phasor0 : derivate) ~ ((noise(seed), _ + dirac) : sah : abs : (_ * max(- fBase + 1, fMod) + fBase)) : _ + dirac;
+
+
+/*******************************************************************************
+* WINDOW FUNCTIONS
+*******************************************************************************/
+
+// Sine window function
+sine(ph) = sin(ph * 2 * PI);
+
+// Cosine window function
+cosine(ph) = cos((ph + 0.25) * 2 * PI);
+
+// TanH window function
+tanh(g, ph) = ma.tanh(ph * g);
+
+// triangular function
+triangular(ph) = abs(ma.frac((ph - .5)) * 2.0 - 1.0);
+
+// clipping function                    
+clip(low, high, x) = max(low, min(high, x));  
+
+// softclipping via hyperbolic tangent function
+saturator(lim, x) = lim * tanh(1, x / (max(lim, EPS)));
+
+
+/*******************************************************************************
+* VIRTUAL ANALOG OSCILLATORS
+*******************************************************************************/
+
+// sinusoidal oscillator
+sineosc(f) = sine(phasor0(f));
+
+// cosinusoidal oscillator
+cosineosc(f) = cosine(phasor0(f));
+
+// triangular function
+triangularosc(f) = (triangular(phasor0(f)) - 0.5) * 2;
+
+// sawtoothosc
+sawtoothosc(f) = (phasor0(f) * -1 + 0.5) * 2;
+
+// square oscillator
+squareosc(f) = ((phasor0(f) < 0.5) - 0.5) * 2;
+
+
+/*******************************************************************************
+* CHAOTIC OSCILLATORS
+*******************************************************************************/
+
+// Logistic Map
+logisticmap(x0,r) = circuit ~ _
+    with {
+        circuit(y) = (x0-x0') + y * r * (1 - y);
+    };
+// process = (.8, 3.99991) : logisticmap -.5 : \(x).(x,x);
+
+// Sine Map
+sinemap(x0,s) = circuit ~ _
+    with {
+        circuit(x) = (x0-x0') + s * sin(PI * x);
+    };
+// process = (.5,.9992) : sinemap -.5 : \(x).(x,x);
+
+// Henon Map
+henonmap(a,b) = circuit ~ _
+    with {
+        circuit(x) = 1 - (a * (x * x)) + (b * x');
+    };
+//process = (1.4,0.3) : henonmap : \(x).(x,x);
+
+// First Return Map
+firstreturnmap(x0,u) = circuit ~ _
+    with {
+        circuit(x) = (x0-x0') + 4 * u * x * (1 - x);
+    };
+// process = (.5,.9992) : firstreturnmap;
+
+// Collatz conjecture
+collatz(x0) = circuit ~ _
+    with {
+        circuit(w) = (x0 - x0') + w :
+                        \(x).((x%(2) == 0) * x, (x%(2) == 1) * x) :
+                            \(odd, even).(odd/2,(even*3)+((even>0))) :> +;
+    };
+// process = sin( (collatz(139489332) * PI));
+
+// Bernoulli Shift
+bernoulli(x0) = circuit ~ _ : \(z).(z-int(z))
+    with {
+        circuit(x) = (x0 - x0') + (x * 2.0);
+    };
+// process = bernoulli(.1324);
+
+// Lorenz Model
+lorenz(x0,y0,z0,sigma,rho,beta,dt,q) = circuit ~ si.bus(3)
+    with {
+        circuit(x,y,z) =
+            ( (x+ (sigma*(y-x))*dt) * q )+ (x0-x0'),
+            ( (y+ (rho*x -(x*z) -y) * dt)*q )+ (y0-y0'),
+            ( (z+ ((x*y)-(beta*z)) * dt)*q )+ (z0-z0');
+    };
+// process =   (1.2,1.3,1.6, 10.0,28,2.666667,.005, 1.0) : lorenz : \(x,y,z).(x+y+z)/100 : \(x).(x,x);
+
+// Van Der Pol Oscillator
+vanderpol(x0,y0,u,dt,epsilon) = circuit ~ si.bus(2)
+    with {
+        circuit(x,y) =
+            ( x + (u * (x - x ^ 3 / 3 - y) * dt) ) + (x0-x0'),
+            ( y + (x / max(u,epsilon) ) * dt ) + (y0-y0');
+    };
+// process = (1,1, 1.0,0.01,2.2204460492503131e-016) : vanderpol : \(x,y).(x/4,y/4);
+
+// Chua Oscillator
+chua(x0,y0,z0,k,a,b,alpha,beta,gamma,dt) = circuit ~ si.bus(3)
+    with {
+        f(x) = b * x + .5 * (a-b) * (abs(x + 1) - abs(x - 1));
+        circuit(x,y,z) =
+            (x0-x0' + x + k *( alpha * (y - x - f(x))) * dt),
+            (y0-y0' + y + k *( (x - y + z)) * dt),
+            (z0-z0' + z + k *(-beta * y - gamma * z) * dt);
+    };
+// process =   (1.16346, -0.0972335, -0.905656, 1, -1.14286, -0.714286, 15.6, 28.58, 0, 0.01) : chua : \(x,y,z).(x+y+z)/3 : \(x).(x,x);
+            
+/*
+for more models serch:
+    -Dyadic transformation
+    -Gauss iterated map
+    -Bogdanov map
+    -Brusselator
+    -Lotka-Volterra
+    -Duffing Oscillator
+    -Hindmarsh–Rose neuron model
+*/

@@ -1,0 +1,40 @@
+/*******************************************************************************
+* CONSTANTS 
+*******************************************************************************/
+import("ls.lib");
+
+// EPSILON = 2.2204460492503131e-016;
+EPS = ma.EPSILON;
+
+// PI = 3.141592653589793238462643383279502884197169399375105820974944592307816406;
+PI = ma.PI;
+
+// TWO PI
+TWOPI = 2.0 * PI;
+
+// MAX SAMPLE RATE
+SRMAX = 192000;
+
+// CURRENT SAMPLE RATE
+SR = ma.SR;
+
+// NYQUIST FREQUENCY AT CURRENT SAMPLE RATE
+NY = SR / 2.0;
+
+// 1 SAMPLE IN SECONDS
+T = 1.0 / SR;
+
+// T IN PI
+PIT = PI * T;
+
+// T IN TWOPI
+TWOPIT = TWOPI * T;
+
+// HIGHEST NUMBER : MAX = 1.7976931348623158e+308;
+MAX = ma.MAX;
+
+// LOWEST NUMBER : MIN = 2.2250738585072014e-308;
+MIN = ma.MIN;
+
+// HIGHEST UDIBLE RANGE
+HUR = 20000;

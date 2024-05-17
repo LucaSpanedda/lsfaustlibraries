@@ -1,0 +1,41 @@
+/*******************************************************************************
+* RANDOM VALUES GENERATION
+*******************************************************************************/
+import("ls.lib");
+
+// pseudo-random noise with linear congruential generator (LCG)
+noise(initSeed) = lcg ~ _ : (_ / m)
+with{
+    a = 18446744073709551557; c = 12345; m = 2 ^ 31; 
+    lcg(seed) = ((a * seed + c) + (initSeed - initSeed') % m);
+};
+
+// sah noise
+sahNoise(f, seed) = sahSinc(f, noise(seed));
+
+// sah noise asinc
+sahNoiseAsinc(fBase, fMod, seed) = sahAsinc(fBase, fMod, seed, noise(seed));
+
+
+/*******************************************************************************
+* NONLINEARITIES
+*******************************************************************************/
+
+controlSignalProcessing(i, k, exponent, responseTime, x) = vgroup("cntrlSig %i",
+    xAverageSign * pow(abs(xAverageNormalisedSaturated) * .9, exponent) : hgroup("cntrl %i", infoScale(k, -1, 1)) :
+        os.osc : hgroup("cntrl Osc %i", infoScale(k, -1, 1))
+            : SAHDiffInvertion  : si.smoo : hgroup("cntrl Sah %i", infoScale(k, -1, 1))
+)
+with {
+    xAverage = x : seq(i, 4, LPTPT(1.0 / responseTime));
+    xAverageRMS = xAverage * xAverage : seq(i, 4, LPTPT(1.0 / (10.0 * responseTime))) : sqrt;
+    xAverageNormalised = xAverage / max(EPS, xAverageRMS);
+    xAverageNormalisedSaturated = ma.tanh(xAverageNormalised);
+    xAverageSign = ma.signum(xAverage);
+};
+
+// Relay Hysteron
+hysteron(alpha, beta, x) = loop ~ _
+    with {
+        loop(y) = ba.if(x < alpha, .0, ba.if(x > beta, 1.0, y));
+    };  
