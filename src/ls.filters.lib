@@ -5,36 +5,35 @@ import("ls.lib");
 
 // onezero, g = give amplitude 0 to +/- 1 (open - close) to the delayed signal 
 oz(g) = _ <: (_ : mem * g), _ :> +; 
-//process = no.noise : oz(1); 
 
 // onepole, g = give amplitude 0 to +/- 1 (open - close) to the delayed signal 
 op(g) = _ * (1 - abs(g)) : + ~ (_ : * (g));
-//process = no.noise : op(-0.999);
 
 // only the pole section
 pole(g) = + ~ * (g);
-//process = no.noise : pole(.95);
 
 // dc blocker - https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html
 dcblocker = _ : oz(-1) : pole(0.998);
-//process = 1 : dcblocker;
 
-// onepole with frequency cut formula, fc = Hz
-opfc(fc) = _ * G : + ~ (_ : * (1 - G))
+// onepole with frequency cut formula (chamberlin), fc = Hz
+lp1p(fc) = _ * g : + ~ * (1 - g)
     with{
-        K(x) = x / (1.0 + x);
-        G = tan(fc * PI / SR) : K;
+        k(x) = x / (1.0 + x);
+        g = tan(fc * PI / SR) : k;
     };
-// process = no.noise : opfc((100));
+
+lp1p2(fc) = _ * a0 : + ~ * (b1)
+      with {
+           a0 = 1 - b1;
+           b1 = exp((fc * PI / SR) * -1);
+      };
 
 // onepole in seconds or smooth function
-opsec(sec) = opfc(f2sec(sec), _);
+opsec(sec) = lp1p(f2sec(sec), _);
 smooth(sec) = opsec(sec);
-//process = no.noise : smooth(10);
 
 // feedforward comb filter, (t, g) = delay time in samples, filter gain 0-1 
 ffcf(t, g) = _ <: ((_ @ (t)) * g), _ :> +; 
-//process = no.noise : ffcf(10, 0.99); 
 
 // feedback comb filter, (t, g) = give: delay time in samples, feedback gain 0-1
 fbcf(t, g) = _ : (+  @(t - 1) ~ *(g)) : mem;
@@ -43,8 +42,7 @@ fbcf(t, g) = _ : (+  @(t - 1) ~ *(g)) : mem;
 apf(del, g) = _ : (+ : _ <: @(del  - 1), *(g))~ *(-g) : mem, _ : + : _;
 
 // lowpass feedback comb filter, (t, g) = give: delay time in samples, g gain 0-1, Freq cut (HZ)
-lbcf(t, g, fc) = _ : (+  @(t - 1) ~ (opfc(fc) * (g))) : mem;
-
+lbcf(t, g, fc) = _ : (+  @(t - 1) ~ (lp1p(fc) * (g))) : mem;
 
 /*******************************************************************************
 * SVF : STATE VARIABLE FILTERS & TPT
