@@ -57,6 +57,9 @@ tanh(g, ph) = ma.tanh(ph * g);
 // triangular function
 triangular(ph) = abs(ma.frac((ph - .5)) * 2.0 - 1.0);
 
+// breakpoint triangular function
+breakpointTriangle(ph, x) = ((x > ph) * (((1 - ph) - (x - ph)) / (1 - ph))) + ((x < ph) * (x / ph));
+
 // clipping function                    
 clip(low, high, x) = max(low, min(high, x));  
 
