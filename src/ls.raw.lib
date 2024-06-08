@@ -3,106 +3,53 @@
 *******************************************************************************/
 import("ls.lib");
 
-looper(i) = vgroup("looper", buffer)
-with{
-    LengthSecMax = 10;
-    offset = 2;
-    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
-    cgui(x) = vgroup("controls", x);
-    kgui(x) = hgroup("knobs", x);
-    readSpeed = cgui(kgui(4 ^ 
-                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
-    lengthSec = cgui(kgui(
-                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1)));
-    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
-                hgroup("writing %i", info(1, 0, 1))) ~ 
-                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
-    readIndex = readSpeed/float(SR * lengthSec) : (+ : ma.frac : 
-                hgroup("reading %i", info(1, 0, 1))) ~ _ : 
-                * (float(SR * lengthSec)) : int;
-    record =    cgui(checkbox("[1]Record %i") : int);
-    buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
-};
+//----------------------------------------------------------------- SAMPLERS ---
+sampler(i, recON, lenSec, fModON, invON, jitON, windON, windSamps, fjit, fjitMod, seed, x) = buffer
+    with{
+        // tape dimensions
+        offset = 2;
+        LengthSecMax = 10;
+        lengthSec = clip(0.001, LengthSecMax, lenSec) : int;
+        bufferLenght = SR * lengthSec : int;
 
-walkergrains(i, record, tapeLSec, fread, fjitter, fjitasinc, fwindow, x) = 
-(x : vgroup("looper", buffer)) * (readPhasor : (!, _)) + * (1 - (readPhasor : (!, _)))
-with{
-    offset = 2;
-    LengthSecMax = 10;
-    // phasor with random reverse
-    phasorScatteringX(f, fJitSinc, fAsinc, fWin, seed) = ph, window
-        with{
-            random = sahAsincPW(fJitSinc, fAsinc, fWin, noise(seed));
-            ph = phasorOffset(f, abs(random : (_, !, !)));
-            window = (random : (!, !, _)) > 0;
-        };
-    phasorReverse(f, minSF, maxSF, seed) = int ~  (_ + 1' * (sahAsinc(minSF, maxSF, noise(seed)) : signum)) % (SR / f) : _ * f : _ / SR : abs;
-    readPhasor = phasorScatteringX(1 / lengthSec, mnsf, mxsf, fwindow, i * 1324);
+        // phasor with phase offset : 0 - 1 (memory pointer)
+        phasorOffset_(f, offset, rec) = (_ <: _ + f, _) ~ (_ * rec % bufferLenght) : (!, _) : (_ + offset * bufferLenght) % bufferLenght;
 
-    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
-    readSpeed = fread;
-    lengthSec = clip(0.001, 10, tapeLSec) : int;
-    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
-                hgroup("writing %i", info(1, 0, 1))) ~ 
-                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
-    mxsf = clip(.001, 1000, fjitter);
-    mnsf = clip(.001, 1000, mxsf + fjitasinc);
-    readIndex = (readPhasor : (_, !)) :
-                hgroup("reading %i", info(1, 0, 1))
-                * (float(SR * lengthSec)) : int;    randomsah(minF, maxF, y) = out ~ _ with{
-        out(x) =    (minF, abs(x * (maxF - minF))) :> 
-                phasor : dirac : (_ + dirac, x, y) : selector;
+        // clock function - asinc pulse train
+        clock = asincPulseTrain(fjit, fjitMod, seed * 1 * (i + 1));
+
+        // sah noise is positive or negative? (+/- 1)
+        sahPolarity = signum(((noise(seed * 3 * (i + 1)), clock) : sah)) * invON + (1 - invON);
+        // sampled freq 
+        sahFreq = (16 ^ ((noise(seed * 4 * (i + 1)), clock) : sah)) * fModON + (1 - fModON);
+        // sampled offset
+        sahJitter = (abs((noise(seed * 2 * (i + 1)), clock) : sah) * jitON);
+        // windowing
+        ramp = (((clock == 0) : (+ ~ _* (1 - clock)) / windSamps <: (_ <= 1) * _) + clock) > 0;
+        wind = ramp;
+
+        // pointers
+        recIndex =  phasorOffset_((1 / lengthSec), 0, (recON));
+        readIndex = phasorOffset_((sahFreq / lengthSec) * sahPolarity, sahJitter, 1) : abs;    
+
+        // buffer
+        buffer = x <: (rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex + (offset * recON), _, readIndex + offset) <: (_ * wind * windON) + (_ * (1 - windON))) + (_ * (1 - wind)) * windON;
     };
-    buffer = rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
-};
-//process = walkergrains(1, 1, 2, 10, 4, 8, 100, _); // ~ fi.dcblocker * 1; 
-//process = _ <: ((ro.interleave(N, N / 2), si.bus(N)) :> si.bus(N) : par(i, N, walkergrains(1 + i, 1, 2) : fi.dcblocker)) ~ (si.bus(N) :> (_ / N) * 1.25 <: si.bus(N)) with{N = 4;};
-
-looperJitterSinc(i, y) = vgroup("looper", buffer ~ _ * fb)
-with{
-    LengthSecMax = 10;
-    offset = 2;
-    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
-    cgui(x) = vgroup("controls", x);
-    kgui(x) = hgroup("knobs", x);
-    readSpeed = cgui(kgui(4 ^ 
-                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
-    lengthSec = cgui(kgui(
-                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1)));
-    fJitter = cgui(kgui(
-                hslider("[0]F Jitter [style:knob][unit:_sec]",1, 1, 100, .001)));
-    fb = cgui(kgui(
-                hslider("[0]Feedback [style:knob][unit:_sec]",0, 0, 1, .001)));
-    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
-                hgroup("writing %i", info(1, 0, 1))) ~ 
-                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
-    readIndex = phasorScatteringSinc(1 / lengthSec, fJitter, i * 42543218) : hgroup("reading %i", info(1, 0, 1)) * (float(SR * lengthSec)) : int;
-    record =    cgui(checkbox("[1]Record ") : int);
-    buffer(x) =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, y + x, readIndex + offset);
-};
-
-looperJitterAsinc(i) = vgroup("looper", buffer)
-with{
-    LengthSecMax = 10;
-    offset = 2;
-    info(i, lo, up) = _ <: _, hbargraph(" %i ", lo, up) : attach;
-    cgui(x) = vgroup("controls", x);
-    kgui(x) = hgroup("knobs", x);
-    readSpeed = cgui(kgui(4 ^ 
-                hslider("[0]Read Speed [style:knob][unit:_pitch]",0,-1,+1,0.01)));
-    lengthSec = cgui(kgui(
-                hslider("[0]Tape Length [style:knob][unit:_sec]",1, 1, LengthSecMax, 1)));
-    minfJitter = cgui(kgui(
-                hslider("[0]min F Jitter [style:knob][unit:_sec]",1, 1, 100, .001)));
-    maxfJitter = cgui(kgui(
-                hslider("[0]max F Jitter [style:knob][unit:_sec]",1, 1, 100, .001)));
-    recIndex =  1 / float(SR * lengthSec) : (+ : ma.frac : 
-                hgroup("writing %i", info(1, 0, 1))) ~ 
-                * (record) : * (float(SR * lengthSec)) + (offset * record) : int;
-    readIndex = phasorScatteringAsinc(1 / lengthSec, minfJitter, maxfJitter, i * 12543218) : hgroup("reading %i", info(1, 0, 1)) * (float(SR * lengthSec)) : int;
-    record =    cgui(checkbox("[1]Record %i") : int);
-    buffer =    rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex, _, readIndex + offset);
-};
+// sampler(i, recON, lenSec, fModON, invON, jitON, windON, windSamps, fjit, fjitMod, seed, x)
+/*
+process = _ <: par(i, 2, sampler(i, recONgui, lengui, fModgui, inversegui, jitgui, windgui, windsampgui, fjitgui, fmodjitgui, 1343820503284, _))
+with{ 
+    recONgui = checkbox("recording"); 
+    lengui = hslider("tape lenght", 1, 1, 10, 1);
+    fModgui = checkbox("frequency jittering");
+    inversegui = checkbox("inverse Jittering");
+    jitgui = checkbox("position Jittering");
+    windgui = checkbox("windowing jittering");
+    windsampgui = hslider("window samples", 1, 1, 192000, 1);
+    fjitgui = hslider("synch jit clock (base)", 1, 1, 1000, 1);
+    fmodjitgui = hslider("asynch jit clock (sum)", 1, 1, 1000, 1);
+}; 
+*/
 
 //------------------------------------------------------- GRANULAR SAMPLING ---
 granular_sampling(k, N, bufSec, x) = triggerArray(N, rate) : 
@@ -233,41 +180,3 @@ with{
 };
 // process = timeStretcher(1, 1, 1, .1, .5, .1, .01, 80, 1), 
 //     timeStretcher(1, 1, 1, .1, .0, .1, .01, 80, 2);
-
-//----------------------------------------------------------------- SAMPLERS ---
-sampler(memSec, readSpeed, x) =
-    it.frwtable(
-                    3, // interpolation order
-                    192000 * (20), // max.SR * Seconds
-                    .0, // start Point
-                    ba.period(memSec * SR), // writing index
-                    x, // input
-                    phasor(readSpeed/memSec) *
-                      memSec * SR// external Reading index (0-1)
-                );
-
-chunkSampler(memSec, readSpeed, jumpFreq, chunkDim, seed, x) =
-    sampler * squareOut
-        with{
-            square = pwsquare(jumpFreq, chunkDim);
-            reader =  splicePH(readSpeed/memSec, seed, square);
-            readOut = reader : _, !, !;
-            squareOut = reader : !, _, !;
-            sampler =
-                it.frwtable(
-                    3, // interpolation order
-                    192000 * (20), // max.SR * Seconds
-                    .0, // start Point
-                    ba.period(memSec * SR), // writing index
-                    x, // input
-                    readOut * memSec * SR// external Reading index (0-1)
-                );
-        };
-//process = chunkSampler(4, 1, 8, .99, 2), chunkSampler(4, 1, 8, .99, 4);
-
-chunkGrains(voices, memSec, readSpeed, jumpFreq, chunkDim, x)=
-    par(i, voices,
-            chunkSampler(memSec, readSpeed, jumpFreq, chunkDim, i, x/voices)
-        ) :> (+,+);
-//process = _ <: chunkGrains(8, 4, 1, 4, .99);
-//pwg = hslider("slide",0,0,1,.001); ftg = hslider("freq.",0,0,100,.001);
