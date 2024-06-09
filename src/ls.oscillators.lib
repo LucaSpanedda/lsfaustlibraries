@@ -23,6 +23,16 @@ rampms(ms, t) = (t == 0) * (1000 / ms) : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
 // phasor with Phase Jitter : trigger with 1 sample trigger
 phasorScattering(f, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs); 
 
+// line function generator (from 0 to value at SR time). trigger = dirac
+line(trigger, value) = feedf ~ feedb : offset
+ with 
+    {   
+        break = value;
+        y = trigger > trigger';
+        feedf(x) = (x > 0) + (x * (x > 0)) + y;
+        feedb(x) = (x <= break) * x;
+        offset(x) = ((x - 1) > 0) * (x - 1);
+    };
 
 /*******************************************************************************
 * PLS : PULSE SIGNALS GENERATION
