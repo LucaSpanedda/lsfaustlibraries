@@ -8,7 +8,9 @@ phasor(f) = f : + ~  _ % SR : _ / SR;
 
 // phasor that start from 0
 phasor0(f) = (_ <: _ + f, _) ~  _ % SR : (!, _ / SR);
-//process = phasor(1), phasor0(1);
+
+// phasor that start from zero until ando goes until % value
+phasor0V(f, value) = (_ <: _ + f, _) ~  _ % value : (!, _);
 
 // phasor with phase reset
 phasorPH(f, reset) = (_ <: _ + f, _) ~  (_ % SR : _ * (1 - reset)) : (!, _ / SR);
@@ -49,6 +51,18 @@ pwTrain(f, samps) = ((phasor0(f) * SR) - (f * samps)) < 0;
 
 // asynchronous pulse train in HZ : fBase = standard frequency, fMod = -/+ asynchronous deviation
 asincPulseTrain(fBase, fMod, seed) = (phasor0 : derivate) ~ ((noise(seed), _ + dirac) : sah : abs : (_ * max(- fBase + 1, fMod) + fBase)) : _ + dirac;
+
+// trainpulse Sequence
+pulseSeq(fSeq, fBase, fMod, seed) = buffer : condition
+ with
+    {
+        pulse = asincPulseTrain(fBase, fMod, seed);
+        recIndex = line(button("TR"), SR);
+        readIndex = phasor0V(fSeq, SR);
+        buffer = rwtable(SRMAX, 0.0, recIndex, pulse, readIndex);
+        condition(x) = x > x';
+    };
+//process = pulseSeq(0.25, 1, 100, 7432943824238), pulseSeq(0.25, 1, 100, 57438524238);
 
 
 /*******************************************************************************
