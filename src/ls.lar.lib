@@ -1,0 +1,118 @@
+import("stdfaust.lib");
+
+// gui parameters
+FC_gui = hslider("FC", 1000, 20, 20000, 1) : si.smoo;
+DelT_gui = hslider("Del Samps", 100, 2, 1000, 1);
+BW_gui = hslider("BW", 1000, 1, 10000, 1) : si.smoo;
+
+// gui values inspector
+inspect(i, lower, upper) = _  <: _ , 
+    vbargraph(" %2i [style:numerical]", lower, upper) : 
+        attach;
+
+// limit function for library and system
+limit(maxl, minl, x) = x : max(minl, min(maxl));
+
+// absolute average with onepole lowpass and Tau Response
+integrator(seconds, x) = an.abs_envelope_tau(limit(1000,.001,seconds), x);
+
+// delay with feedback in seconds
+delayfb(delSec, fb, x) = loop ~ _ : mem
+with{ 
+    loop(z) = ( (z * fb + x) @(max(0, ba.sec2samp(delSec) - 1)) );
+};
+
+// onepole TPT filter
+onePoleTPT(cf, x) = loop ~ _ : ! , si.bus(3)
+with {
+    g = tan(cf * ma.PI * (1/ma.SR));
+    G = g / (1.0 + g);
+    loop(s) = u , lp , hp , ap
+    with {
+        v = (x - s) * G;
+        u = v + lp;
+        lp = v + s;
+        hp = x - lp;
+        ap = lp - hp;
+    };
+};
+
+// LP and HP TPT
+LPTPT(CF, x) = onePoleTPT(max(ma.EPSILON, min(20480, CF)), x) : (_ , ! , !);
+HPTPT(CF, x) = onePoleTPT(max(ma.EPSILON, min(20480, CF)), x) : (! , _ , !);
+
+// Zavalishin's SVF BP FILTER
+// optimized BP from the TPT version of the SVF Filter by Vadim Zavalishin
+// reference : (by Will Pirkle)
+// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
+BPSVFTPT(glin, bw, cf, x) = loop ~ si.bus(2) : (! , ! , _)
+    with {
+        g = tan(cf * ma.PI * (1.0/ma.SR));
+        Q = cf / max(ma.EPSILON, bw);
+        R = 1.0 / (Q + Q);
+        G = 1.0 / (1.0 + 2.0 * R * g + g * g);
+        loop(s1, s2) = u1 , u2 , bp * glin
+            with {
+                bp = (g * (x - s2) + s1) * G;
+                bp2 = bp + bp;
+                v2 = bp2 * g;
+                u1 = bp2 - s1;
+                u2 = v2 + s2;
+            };
+    };
+
+// feedback comb filter, (t, g) = give: delay time in samples, feedback gain 0-1
+fbcf(t, g) = _ * (1 - g) : ((_+_ : de.sdelay(192000, 1024, t)) ~ *(g)) : mem;
+
+// SVF TPT version of the SVF Filter by Vadim Zavalishin
+SVFTPT(Q, cf, x) = loop ~ si.bus(2) : (! , ! , _ , _ , _ , _ , _)
+    with {
+        g = tan(cf * ma.PI * ma.T);
+        R = 1.0 / (2.0 * Q);
+        G1 = 1.0 / (1.0 + 2.0 * R * g + g * g);
+        G2 = 2.0 * R + g;
+        loop(s1, s2) = u1 , u2 , lp , hp , bp * 2.0 * R , x - bp * 4.0 * R , bp
+            with {
+                hp = (x - s1 * G2 - s2) * G1;
+                v1 = hp * g;
+                bp = s1 + v1;
+                v2 = bp * g;
+                lp = s2 + v2;
+                u1 = v1 + bp;
+                u2 = v2 + lp;
+            };
+    };
+
+LPSVF(Q, cf, x) = SVFTPT(Q, cf, x) : (_ , ! , ! , ! , !);
+
+HPSVF(Q, cf, x) = SVFTPT(Q, cf, x) : (! , _ , ! , ! , !);
+
+BPSVF(Q, cf, x) = SVFTPT(Q, limit(20000, 20, cf), x) : (! , ! , _ , ! , !);
+
+NotchSVF(Q, cf, x) = x - BPSVF(Q, limit(20000, 20, cf), x);
+
+APSVF(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , ! , _ , !);
+
+PeakingSVF(Q, cf, x) = LPSVF(Q, cf, x) - HPSVF(Q, cf, x);
+
+BP2SVF(Q, cf, x) = SVFTPT(Q, cf, x) : (! , ! , ! , ! , _);
+
+BPBWSVF(BW, CF, x) = BPSVF(limit(20000, minimum, (CF / BW)), CF, x);
+
+
+// The LAR mechanism: Audio Feedback with Self-regulated Gain, by Agostino Di Scipio
+// https://echo.orpheusinstituut.be/article/a-relational-ontology-of-feedback
+lar(i, x) = (x : (HPTPT(50) : LPTPT(6000)) * (1 - (x : HPTPT(50) : LPTPT(6000) : integrator(.01) : delayfb(.01, 0.995) : LPTPT(25) ^ 2 : limit(1, 0)) : hgroup("cntrlMic", inspect(i, -100, 100))));
+//process = lar(1) <: si.bus(2);
+
+// lar comb 
+larComb(i, delT, g) = lar(i) : fbcf(delT, g);
+//process = larComb(1, DelT_gui, 0.9) <: si.bus(2);
+
+// lar Bandpass
+larBP(i, BW, FC) = lar(1) : BPSVFTPT(1, BW, FC);
+//process = larBP(1, BW_gui, FC_gui)  <: si.bus(2);
+
+//lar peaking filter
+larPeak(i, BW, FC) = lar(i) : PeakingSVF(BW, FC);
+//process = larPeak(1, BW_gui, FC_gui) * 0.02 <: si.bus(2);
