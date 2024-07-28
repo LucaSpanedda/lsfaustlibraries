@@ -10,6 +10,12 @@ with{
     lcg(seed) = ((a * seed + c) + (initSeed - initSeed') % m);
 };
 
+// random number generator
+random(range, seed, t) = ((noise(seed) : abs), t) : sah * range;
+
+// random clock trigger generator
+randomclock(ms, seed) = (1000 / max(ma.EPSILON, _) : pulseTrain <: random(ms, seed), _) ~ _ : !, _;
+
 // sah noise
 sahNoise(f, seed) = sahSinc(f, noise(seed));
 
