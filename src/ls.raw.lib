@@ -4,6 +4,24 @@
 import("ls.lib");
 
 //----------------------------------------------------------------- SAMPLERS ---
+deljitter(seed, lenSec, fbGain) = (_ + _ : buffer) ~ _ * fbGain
+    with{
+        // tape dimensions
+        offset = 2;
+        LengthSecMax = 10;
+        lengthSec = clip(0.001, LengthSecMax, lenSec) : int;
+        bufferLenght = SR * lengthSec : int;
+        // phasor with phase offset : 0 - 1 (memory pointer)
+        phasorOffset_(f, phase, rec) = (_ <: _ + f, _) ~ (_ * rec % bufferLenght) : (!, _) : (_ + phase * bufferLenght) % bufferLenght;
+        // pointers
+        recIndex =  phasorOffset_((1 / lengthSec), 0, 1);
+        readIndex(phase) = phasorOffset_((1 / lengthSec), phase, 1);   
+        randomPhase = randomclock(1000, seed * 1) : random(1, seed * 2, _); 
+        // buffer
+        buffer = rwtable(SRMAX * LengthSecMax + offset, 0.0, recIndex + offset, _, (randomPhase : readIndex) + offset);
+    };
+// process = _ <: deljitter(7432318424787391, 4, 0.9), deljitter(473877432318491, 4, 0.9);
+
 sampler(i, recON, lenSec, fModON, invON, jitON, windON, windSamps, fjit, fjitMod, seed, x) = buffer
     with{
         // tape dimensions
