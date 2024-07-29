@@ -35,8 +35,8 @@ deljitter(msBuffer, msJit, fbGain, loop, seed) = ((_ + _) : buffer) ~ _ * fbGain
         // ms Buffer
         maxDelay = (ma.SR / 1000) * msBuffer;
         offSet = 2;
-        // max fixed delay time is 10 second for evey SR
-        tableMax = 192000 * 10;
+        // max fixed delay time for evey SR
+        tableMax = (192000 / 1000) * msBuffer;
         bufferLenght = maxDelay + 1;
         // loop the Table
         loopON = 1 - loop;
@@ -50,7 +50,7 @@ deljitter(msBuffer, msJit, fbGain, loop, seed) = ((_ + _) : buffer) ~ _ * fbGain
         // buffer
         buffer = rwtable(tableMax + offSet, 0.0, recIndex + (offSet * loopON), _, readIndex + offSet);
     };
-// process =  _ <: deljitter(1000, 1000, 0.99, checkbox("loop"), 4569335492), deljitter(1000, 1000, 0.99, checkbox("loop"), 2332939322);
+//process =  _ <: deljitter(4000, 1000, 0.99, checkbox("loop"), 4569335492), deljitter(4000, 1000, 0.99, checkbox("loop"), 2332939322);
 
 sampler(i, recON, lenSec, fModON, invON, jitON, windON, windSamps, fjit, fjitMod, seed, x) = buffer
     with{
