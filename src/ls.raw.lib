@@ -30,13 +30,39 @@ variabledelay(maxDelay, delsamples) = buffer
     };
 //process =  _ <: _, variabledelay(1000, hslider("D", 1000, 0, 1000, 1)), _@1000;
 
-deljitter(msBuffer, msJit, fbGain, loop, seed) = ((_ + _) : buffer) ~ _ * fbGain 
+deljitter(msBuffer, msJit, fbGain, seed) = outpath
     with{
+        // GUI parameter info
+        info(i, lower, upper) = hbargraph("%i", lower, upper);
         // ms Buffer
-        maxDelay = (ma.SR / 1000) * msBuffer;
+        maxDelay = (ma.SR / 1000) * clip(1, 10000, msBuffer) : int;
+        // max fixed delay time for evey SR (10 seconds)
+        tableMax = 192000 * 10;
+        bufferLenght = maxDelay + 1;
+        // phasor with phase offset : 0 - 1 (memory pointer)
+        phasorOffset_(f, phase) = (_ <: _ + f, _) ~ (_ % bufferLenght) : (!, _) : (_ + phase) % bufferLenght;
+        // random values at random time
+        randomPhase = randomclock(msJit, seed * 1) : random(1, seed * 2, _); 
+        // pointers
+        recIndex =  int(phasorOffset_(1, 0));
+        readIndex = int(phasorOffset_(1, (bufferLenght - maxDelay * randomPhase)));   
+        // buffer
+        buffer = rwtable(tableMax, 0.0, recIndex, _, readIndex);
+        // output 
+        outpath = ((_ + _) : buffer) ~ _ * fbGain, (recIndex / bufferLenght : info(1, 0, 1)) : attach, (readIndex / bufferLenght : info(2, 0, 1)) : attach;
+    };
+//process =  _ : deljitter(hslider("bufferms", 1000, 1, 10000, 1), 1000, 0.9, 2312409014821);
+
+deljitterloop(msBuffer, msJit, fbGain, loop, seed) = outpath
+    with{
+        // GUI parameter info
+        info(i, lower, upper) = hbargraph("%i", lower, upper);
+        // offset for R & W
         offSet = 2;
-        // max fixed delay time for evey SR
-        tableMax = (192000 / 1000) * msBuffer;
+        // ms Buffer
+        maxDelay = (ma.SR / 1000) * clip(1, 10000, msBuffer) : int;
+        // max fixed delay time for evey SR (10 seconds)
+        tableMax = 192000 * 10 + offSet;
         bufferLenght = maxDelay + 1;
         // loop the Table
         loopON = 1 - loop;
@@ -45,12 +71,37 @@ deljitter(msBuffer, msJit, fbGain, loop, seed) = ((_ + _) : buffer) ~ _ * fbGain
         // random values at random time
         randomPhase = randomclock(msJit, seed * 1) : random(1, seed * 2, _); 
         // pointers
-        recIndex =  int(phasorOffset_(1, 0)) * loopON;
-        readIndex = int(phasorOffset_(1, (bufferLenght - maxDelay * randomPhase) * loopON));   
+        recIndex =  int(phasorOffset_(1, 0)) * loopON + (offSet * loopON);
+        readIndex = int(phasorOffset_(1, (bufferLenght - maxDelay * randomPhase) * loopON)) + offSet;   
         // buffer
-        buffer = rwtable(tableMax + offSet, 0.0, recIndex + (offSet * loopON), _, readIndex + offSet);
+        buffer = rwtable(tableMax, 0.0, recIndex, _, readIndex);
+        // output 
+        outpath = ((_ + _) : buffer) ~ _ * fbGain, (recIndex / bufferLenght : info(1, 0, 1)) : attach, (readIndex / bufferLenght : info(2, 0, 1)) : attach;
     };
-//process =  _ <: deljitter(4000, 1000, 0.99, checkbox("loop"), 4569335492), deljitter(4000, 1000, 0.99, checkbox("loop"), 2332939322);
+//process =  _ : deljitterloop(hslider("bufferms", 1000, 1, 10000, 1), 1000, 0.99, checkbox("loop"), 2312409014821);
+
+delinversion(msBuffer, msJit, fbGain, seed) = outpath
+    with{
+        // GUI parameter info
+        info(i, lower, upper) = hbargraph("%i", lower, upper);
+        // ms Buffer
+        maxDelay = (ma.SR / 1000) * clip(1, 10000, msBuffer) : int;
+        // max fixed delay time for evey SR (10 seconds)
+        tableMax = 192000 * 10;
+        bufferLenght = maxDelay + 1;
+        // phasor with phase offset : 0 - 1 (memory pointer)
+        phasorOffset_(f, phase) = (_ <: _ + f, _) ~ (_ % bufferLenght) : (!, _) : (_ + phase) % bufferLenght;
+        // random values at random time
+        randomPhase = randomclock(msJit, seed * 1) : random(1, seed * 2, _); 
+        // pointers
+        recIndex =  int(phasorOffset_(1, 0));
+        readIndex = int(phasorOffset_((((randomPhase > 0.5) - 0.5) * 2), 0)) : abs;   
+        // buffer
+        buffer = rwtable(tableMax, 0.0, recIndex, _, readIndex);
+        // output 
+        outpath = ((_ + _) : buffer) ~ _ * fbGain, (recIndex / bufferLenght : info(1, 0, 1)) : attach, (readIndex / bufferLenght : info(2, 0, 1)) : attach;
+    };
+//process =  _ : delinversion(hslider("bufferms", 1000, 1, 10000, 1), 100, 0.9, 2312409014821);
 
 sampler(i, recON, lenSec, fModON, invON, jitON, windON, windSamps, fjit, fjitMod, seed, x) = buffer
     with{
