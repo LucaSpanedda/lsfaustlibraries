@@ -25,6 +25,10 @@ rampms(ms, t) = (t == 0) * (1000 / ms) : (+ ~ _* (1 - t)) / SR <: (_ < 1) * _;
 // phasor with Phase Jitter : trigger with 1 sample trigger
 phasorScattering(f, seed, t) = phasorOffset(f, sah(noise(seed), t) : abs); 
 
+// rate accepts an input signal from a phasor and time scales it by a multiplier 
+rate(f) = _ <: (((_ < mem(_)) : (_ + _) ~ _ % f : _) + _) / f;
+//process = phasor0(1) : rate(8);
+
 // line function generator (from 0 to value at SR time). trigger = dirac
 line(trigger, value) = feedf ~ feedb : offset
  with 
@@ -35,6 +39,17 @@ line(trigger, value) = feedf ~ feedb : offset
         feedb(x) = (x <= break) * x;
         offset(x) = ((x - 1) > 0) * (x - 1);
     };
+
+// timedlatch is 1 for a period of time in samples after being triggered
+timedlatch(value, trigger) = (feedf ~ feedb) > 0
+ with 
+    {   
+        break = value;
+        y = trigger > trigger';
+        feedf(x) = (x > 0) + (x * (x > 0)) + y;
+        feedb(x) = (x <= break) * x;
+    };
+//process = button("gate") : timedlatch(ma.SR * 10);
 
 /*******************************************************************************
 * PLS : PULSE SIGNALS GENERATION
