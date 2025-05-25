@@ -215,6 +215,12 @@ pulseSeq(fSeq, fBase, fMod, seed) = buffer : condition
 * WINDOW FUNCTIONS
 *******************************************************************************/
 
+// sigmoid functions - for softclipping
+// https://en.wikipedia.org/wiki/Sigmoid_function
+// https://www.sciencedirect.com/topics/computer-science/sigmoid-function
+tanhf(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x));
+atanf(x) = (ma.PI/  4) * x - x * (abs(x) - 1) * (0.2447 + 0.0663 * abs(x));
+
 // Sine window function
 sine(ph) = sin(ph * 2 * PI);
 
@@ -236,6 +242,16 @@ clip(low, high, x) = max(low, min(high, x));
 
 // softclipping via hyperbolic tangent function
 saturator(lim, x) = lim * tanh(1, x / (max(lim, EPS)));
+
+// Chua's Diode
+// https://en.wikipedia.org/wiki/Chua%27s_diode
+chuaDiode(x) = m1 * x + 0.5 * (m0 - m1) * (abs(x + 1) - abs(x - 1))
+with{
+    m0 = -1.143;
+    m1 = -0.714;
+    alpha = 15.6;
+    beta = 28;
+};
 
 /*******************************************************************************
 * VIRTUAL ANALOG OSCILLATORS
@@ -260,90 +276,210 @@ squareosc(f) = ((phasor0(f) < 0.5) - 0.5) * 2;
 * CHAOTIC OSCILLATORS
 *******************************************************************************/
 
-// Logistic Map
-logisticmap(x0,r) = circuit ~ _
+// fixed points and stability
+// ------------------------
+// unstable (or) repeller
+// 0 <-<-< 1 >->-> +inf
+unstable(seed) = f ~ _ 
+with{
+    init = seed - mem(seed);
+    f(x) = x * x + init;
+};
+//process = unstable(0.99);
+
+// stable (or) attractor
+// -inf >->-> 0 <-<-< +inf
+stable(seed) = f ~ _ 
+with{
+    init = seed - mem(seed);
+    f(x) = ((1 / 2) * x) + init;
+};
+//process = stable(100000);
+
+// logistic equation
+// ------------------------
+// poulation models:
+// double - at every new step the population is the double of the preview step
+// stable (or) attractor
+// -inf <-<-< 0 >->-> +inf (for r > 1)
+// population is the same (for r = 1)
+// -inf >->-> 0 <-<-< +inf (for r < 1)
+population(seed, r) = f ~ _ 
+with{
+    init = seed - mem(seed);
+    f(x) = x * r + init;
+};
+//process = population(1, 0.9999);
+
+populationAnnilation(seed, r, a) = f ~ _
+with{
+    init = seed - mem(seed);
+    f(x) = x * r * (1 - x / a) + init;
+};
+//process = populationAnnilation(1, 4, 1.1) * 0.9 : (_ - 0.5);
+
+// Logistic Map (division semplified)
+logisticmap(seed, r) = (f) ~ _
+with {
+    init = seed - mem(seed);
+    f(x) = init + x * r * (1 - x);
+};
+//process = logisticmap(0.2, 3.9);
+
+// Cubic Map
+cubicmap(x0) = f ~ _
     with {
-        circuit(y) = (x0-x0') + y * r * (1 - y);
+        f(x) = (x0 - mem(x0)) + 4 * (x - (x * x));
     };
-// process = (.8, 3.99991) : logisticmap -.5 : \(x).(x,x);
+//process = cubicmap(0.2);
 
 // Sine Map
-sinemap(x0,s) = circuit ~ _
+sinemap(x0, r) = f ~ _
     with {
-        circuit(x) = (x0-x0') + s * sin(PI * x);
+        f(x) = (x0 - mem(x0)) + r * sin((ma.PI * x) / 2);
     };
-// process = (.5,.9992) : sinemap -.5 : \(x).(x,x);
+//process = sinemap(0.5, 2);
+
+// Lotka Volterra
+lotkavolterra(x0, y0) = f ~ si.bus(2)
+    with {
+        a = 0.8;    // Tasso di crescita delle prede (ridotto)
+        b = 0.4;    // Tasso di predazione
+        c = 0.2;    // Tasso di mortalità dei predatori (ridotto)
+        d = 0.2;    // Efficienza di conversione (aumentato)
+        dt = 1.250;  // Passo temporale piccolo ma non troppo
+        f(x, y) =   (x0 - mem(x0)) + (a * x - b * x * y) * dt,
+                    (y0 - mem(y0)) + (- c * y + d * x * y) * dt;
+    };
+//process = lotkavolterra(0.5, 0.5);
+
+// Bernoulli Shift
+bernoulliShift(x0) = shift ~ _
+with {
+        shift(x) = (((x0 - mem(x0)) + x) * (2 + 0.032416190071)) % 1;
+};
+//process = bernoulliShift(0.1), bernoulliShift(0.2);
+
+// Chua Oscillator
+chua(x0, y0, z0) = circuit ~ si.bus(3)
+with {
+    // Initial conditions
+    k = 1.0;  
+    a = -1.27; 
+    b = -0.68; 
+    alpha = 16.2; 
+    beta = 33.6; 
+    gamma = 0.0; 
+    dt = 0.015; 
+    init_x = x0 - mem(x0);
+    init_y = y0 - mem(y0);
+    init_z = z0 - mem(z0);
+    // Diode
+    f(x) = b * x + .5 * (a-b) * (abs(x + 1) - abs(x - 1));
+    // Chua's Circuit
+    circuit(x,y,z) =
+        (init_x + x + k *( alpha * (y - x - f(x))) * dt),
+        (init_y + y + k *( (x - y + z)) * dt),
+        (init_z + z + k *(-beta * y - gamma * z) * dt);
+};
+//process = chua(1.16346, -0.0972335, -0.905656) : par(i, 3, _ * 0.2);
+
+// delayed chua's circuit
+delayedChua = 1 - mem(1) : (_ + _ : fi.lowpass(1, 20000) : fi.dcblocker : de.sdelay(192000, 1024, ma.SR * 0.1 * 0.01)) ~ (0.52 * _ <: chuaNonlin)
+with {
+    chuaNonlin(x) = x - 1.5 * (abs(x + 1) - abs(x - 1));
+    // Diode
+    diode(x) = b * x + .5 * (a-b) * (abs(x + 1) - abs(x - 1));
+};
+//process = delayedChua <: par(i, 2, _ * 0.2);
+
+// Van Der Pol Oscillator of First Grade
+vanderpol(x0, y0, dt, u) = (x + _, y + _ : loop) ~ si.bus(2)
+with {
+    // initial conditions
+    x = x0 - mem(x0);
+    y = y0 - mem(y0);
+    eps = 2.2204460492503131e-016;
+    loop(x,y) = 
+        x + (u * (x - x ^ 3 / 3 - y) * dt), 
+        y + (x / max(u, eps)) * dt;
+
+};
+//process = (vanderpol(1, 1.3, 0.31, 3.3) : par(i, 2, _ * 0.1));
+
+// Lorenz System
+lorenz(x0,y0,z0) = ( x+_,y+_,z+_ : loop  ) ~ si.bus(3)
+with {
+    x = x0-x0';
+    y = y0-y0';
+    z = z0-z0';
+    sigma = 10.0;
+    rho = 28;
+    beta = 2.666667;
+    dt = 0.005;
+        
+    loop(x,y,z) = 
+        (x +(sigma*(y-x)) * dt), 
+        (y + (rho*x -(x*z) -y) * dt), 
+        (z + ((x*y)-(beta*z)) * dt);
+};
+//process = lorenz(1.2,1.3,1.6) : par(i, 3, _ * 0.05);
 
 // Henon Map
 henonmap(a,b) = circuit ~ _
-    with {
-        circuit(x) = 1 - (a * (x * x)) + (b * x');
-    };
-//process = (1.4,0.3) : henonmap : \(x).(x,x);
+with {
+    circuit(x) = 1 - (a * (x * x)) + (b * mem(x));
+};
+//process = (1.4, 0.3) : henonmap;
 
-// First Return Map
-firstreturnmap(x0,u) = circuit ~ _
-    with {
-        circuit(x) = (x0-x0') + 4 * u * x * (1 - x);
-    };
-// process = (.5,.9992) : firstreturnmap;
+// Duffing oscillator - parameters for chaotic regime
+duffing(x0, y0) = f ~ si.bus(2)
+with {
+    f(x, y) = x + (y * dt) + initX,
+        y + ((-delta * y - alpha*x - beta * x * x * x + gamma * cos(omega*time)) * dt) + initY;
+    // Classical parameters
+    dt = 0.01;
+    delta = 0.2;      // Damping
+    alpha = -1.0;     // Negative linear term (bistable system)
+    beta = 1.0;       // Nonlinear term
+    gamma = 0.3;      // Forcing amplitude
+    omega = 1.0;      // Forcing frequency
+  
+    // Time counter
+    time = (+(dt) ~ _);
+  
+    // Initial conditions
+    initX = x0 - mem(x0);
+    initY = y0 - mem(y0);
+};
+//process = (duffing(0.1, 0.2) : par(i, 2, _ * 0.5));
 
-// Collatz conjecture
-collatz(x0) = circuit ~ _
-    with {
-        circuit(w) = (x0 - x0') + w :
-                        \(x).((x%(2) == 0) * x, (x%(2) == 1) * x) :
-                            \(odd, even).(odd/2,(even*3)+((even>0))) :> +;
-    };
-// process = sin( (collatz(139489332) * PI));
+duffingNONforced(init) = (loop ~ (_, !))
+with {
+    impulse = init - init';
+    loop =  _ + impulse <: (0.99 * _ + (_') - ((_') ^ 3), (_'));
+};
+//process = duffingNONforced(0.4) : par(i, 2, _ * 0.5);
 
-// Bernoulli Shift
-bernoulli(x0) = circuit ~ _ : \(z).(z-int(z))
-    with {
-        circuit(x) = (x0 - x0') + (x * 2.0);
+duffingMudd(gain, damping, mod, rate) = 
+  (osc ~ si.bus(2) : (!, !, _ * 0.5))
+with{
+// Duffing Equation
+osc(duffY, duffX) = dy, duffX0, finalY
+    with{
+        finalY = duffX * gain;
+        dt = rate / ma.SR : + ~ _;
+        dy = (finalY - (finalY * finalY * finalY)) -
+          (damping * duffY) + mod * sin(dt);
+        duffX0 = atan(duffY + dy);
     };
-// process = bernoulli(.1324);
+};
+//process = duffingMudd(1.25, 0.3, 3.9, 108);
 
-// Lorenz Model
-lorenz(x0,y0,z0,sigma,rho,beta,dt,q) = circuit ~ si.bus(3)
-    with {
-        circuit(x,y,z) =
-            ( (x+ (sigma*(y-x))*dt) * q )+ (x0-x0'),
-            ( (y+ (rho*x -(x*z) -y) * dt)*q )+ (y0-y0'),
-            ( (z+ ((x*y)-(beta*z)) * dt)*q )+ (z0-z0');
-    };
-// process =   (1.2,1.3,1.6, 10.0,28,2.666667,.005, 1.0) : lorenz : \(x,y,z).(x+y+z)/100 : \(x).(x,x);
-
-// Van Der Pol Oscillator
-vanderpol(x0,y0,u,dt,epsilon) = circuit ~ si.bus(2)
-    with {
-        circuit(x,y) =
-            ( x + (u * (x - x ^ 3 / 3 - y) * dt) ) + (x0-x0'),
-            ( y + (x / max(u,epsilon) ) * dt ) + (y0-y0');
-    };
-// process = (1,1, 1.0,0.01,2.2204460492503131e-016) : vanderpol : \(x,y).(x/4,y/4);
-
-// Chua Oscillator
-chua(x0,y0,z0,k,a,b,alpha,beta,gamma,dt) = circuit ~ si.bus(3)
-    with {
-        f(x) = b * x + .5 * (a-b) * (abs(x + 1) - abs(x - 1));
-        circuit(x,y,z) =
-            (x0-x0' + x + k *( alpha * (y - x - f(x))) * dt),
-            (y0-y0' + y + k *( (x - y + z)) * dt),
-            (z0-z0' + z + k *(-beta * y - gamma * z) * dt);
-    };
-// process =   (1.16346, -0.0972335, -0.905656, 1, -1.14286, -0.714286, 15.6, 28.58, 0, 0.01) : chua : \(x,y,z).(x+y+z)/3 : \(x).(x,x);
-
-/*
-for more models serch:
-    -Dyadic transformation
-    -Gauss iterated map
-    -Bogdanov map
-    -Brusselator
-    -Lotka-Volterra
-    -Duffing Oscillator
-    -Hindmarsh–Rose neuron model
-*/
+duffingsingle(dt, damping, forcing, forcingfreq) = 
+    ((_, _) <: (_ + _ * dt),
+    ((((_, !) <: (_ - (_ * _ * _))) - ((!, _) <: damping * _) + (forcing * cos(forcingfreq * (+ (dt) ~ _)))) * dt + (!, _))) ~ si.bus(2);
+//process = duffingsingle(0.01, 0.2, 0.3, 1.0) : par(i, 2, _ * 0.5);
 
 /*******************************************************************************
 * SAH : SAMPLE AND HOLD
