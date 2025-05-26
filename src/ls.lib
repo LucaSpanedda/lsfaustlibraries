@@ -985,20 +985,20 @@ modapf(delsamples, samplesmod, freqmod, apcoeff) = ( + : _ <:
 
 // Max Peak of the signal
 // Peak Max with IIR filter and max comparison
-peakmax(x) = loop ~_
+peakmax(x) = loop ~ _
 with{
     loop(y) = abs(x) , y : max;
 };
-//process = _ : peakmax;
 
 // Peak Max Normalization
-fixedNorm(x) = 1 / (x : loop ~ _) * x
+
+fixedNorm(target, x) = target / ((x : loop ~ _) * x)
 with{
     loop(y,z) = ( (y, abs(z) ) : max);
 };
-//process = _ * .2 : fixedNorm;
 
 // Peak Envelope Follower
+// https://www.cs.princeton.edu/courses/archive/spr05/cos579/DSP/DSP.html
 peakenvelope(period, x) = loop ~ _
     with {
         loop(y) = max(abs(x), y * coeff);
@@ -1013,11 +1013,9 @@ peakEnvAttRel(att, rel, x) = peakenvelope(rel - att, x) :
 // Moving Average Envelope Follower
 movingAverage(seconds, x) = x - x@(seconds * ma.SR) :
     fi.pole(1.0) / (seconds * ma.SR);
-//process = _ * 10 : movingAverage(1);
 
 // Moving Average RMS
 movingAverageRMS(seconds, x) = sqrt(max(0, movingAverage(seconds, x ^ 2)));
-//process = movingAverageRMS(1);
 
 // PeakHolder - holdTime in Seconds
 peakHolder(holdTime, x) = loop ~ si.bus(2) : ! , _
@@ -1032,8 +1030,23 @@ with {
     };
 };
 
+// Local Max
+localMax(seconds, x) = loop ~ si.bus(4) : _ , ! , ! , !
+with {
+    loop(yState, timerState, peakState, timeInSamplesState) =
+        y , timer , peak , timeInSamples
+    with {
+        timeInSamples = ba.if(reset + 1 - 1', seconds *
+            ma.SR, timeInSamplesState);
+        reset = timerState >= (timeInSamplesState - 1);
+        timer = ba.if(reset, 1, timerState + 1);
+        peak = max(abs(x), peakState * (1.0 - reset));
+        y = ba.if(reset, peak', yState);
+    };
+};
+
 // Attack and Decay RMS Average
-RMS(att, rel, x) = loop ~ _ : sqrt
+RMSAttRel(att, rel, x) = loop ~ _ : sqrt
     with {
         loop(y) = (1.0 - coeff) * x * x + coeff * y
             with {
@@ -1046,7 +1059,7 @@ RMS(att, rel, x) = loop ~ _ : sqrt
 // lookahead limiter with: peakHolder, lowpass & peakenvelope
 // All the credits of the original version goes to Dario Sanfilippo
 LookaheadLimiter(threshold, holdSec, decaySec, x) =
-    (x : peakHolder(holdSec) : LPTPT(1/holdSec) : peakenvelope(decaySec)) :
+    (x : peakHolder(holdSec) : LPTPT(1 / holdSec) : peakenvelope(decaySec)) :
         (min(1, threshold) / max(1, _)) *
             (x @ (holdSec * ma.SR));
 
@@ -1060,7 +1073,6 @@ vgroup("dynaComp %i", (x * scaling) : hgroup("out %i", infoScale(k, -100, 100)))
             clipUni : complement : pow(exponent :
             hgroup("exp %i", infoScale(k, -100, 100)));
     };
-
 
 // Pitch Tracker
 // averaging function with 2pi time constant; t is the averaging time in seconds
@@ -1078,7 +1090,7 @@ zeroCrossing(x) = (x * x') < 0;
 // zero-crossing rate
 zeroCrossingRate(t, x) = zeroCrossing(x) : avg(t);
 
-// pitch tracker as zero-crossing rate of self-regulating lowpassed inputs
+// Pitch tracker as zero-crossing rate of self-regulating lowpassed inputs
 // we highpass the input to avoid infrasonic
 // components to affect the measurements
 // we then clip the lowpass cutoff to improve stability
@@ -1099,23 +1111,32 @@ with{
     out = filter * (1 - bypass) + x * bypass;
 };
 
-
-// Local Max
-localMax(seconds, x) = loop ~ si.bus(4) : _ , ! , ! , !
-with {
-    loop(yState, timerState, peakState, timeInSamplesState) =
-        y , timer , peak , timeInSamples
+// Spectral centroid 
+// The Spectral centroid is the barycentre of spectra
+spectralCentroid(nonlinearity, t, x) = loop ~ _
     with {
-        timeInSamples = ba.if(reset + 1 - 1', limit(1000, 0, seconds) *
-            ma.SR, timeInSamplesState);
-        reset = timerState >= (timeInSamplesState - 1);
-        timer = ba.if(reset, 1, timerState + 1);
-        peak = max(abs(x), peakState * (1.0 - reset));
-        y = ba.if(reset, peak', yState);
+        loop(fb) = centroid
+            with {
+                w(cf) = 2.0 * ma.PI * cf * ma.T;
+                integrator(t, x) = fi.pole(1.0, x * (1.0 / max(ma.EPSILON, t)) * ma.T);
+                lowpass(cf, x) = y
+                    letrec {
+                        'y = (x - s) * G + s;
+                        's = 2 * (x - s) * G + s;
+                    }
+                    with {
+                        G = tan(w(cf) / 2.0) / (1.0 + tan(w(cf) / 2.0));
+                    };
+                highpass(cf, x) = x - lowpass(cf, x);
+                xRMS = an.rms_envelope_tau(t, x);
+                xLRMS = an.rms_envelope_tau(t, lowpass(fb, x));
+                xHRMS = an.rms_envelope_tau(t, highpass(fb, x));
+                diffRMS = (xHRMS - xLRMS) / max(ma.EPSILON, xRMS);
+                nonlinearIntegration = ba.if(nonlinearity, pow(diffRMS, 3), diffRMS);
+                diffInt = max(.0, min(1.0, integrator(t, nonlinearIntegration)));
+                centroid = max(20.0, diffInt * ma.SR * .5);
+            };
     };
-};
-// process = localMax(4);
-
 
 /*******************************************************************************
 * RAW : READ AND WRITE TABLES
